@@ -9,6 +9,7 @@ import ir.iau.library.repository.PersonRepository;
 import ir.iau.library.repository.ReservationRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,7 @@ import java.util.List;
 @Service
 @Transactional
 @RequiredArgsConstructor
+@Slf4j
 public class ReservationService {
 
     private final ReservationRepository reservationRepository;
@@ -62,8 +64,13 @@ public class ReservationService {
     /**
      *  هر روز ساعت ۲ نیمه‌شب وضعیت رزروهای منقضی را به‌روزرسانی می‌کند
      */
-    @Scheduled(cron = "0 0 2 * * *")
+    @Scheduled(cron = "${app.reservation.expire-cron:0 0 2 * * *}")
     public void scheduledExpire() {
-        expireOverdueReservations();
+        try {
+            expireOverdueReservations();
+        } catch (Exception e) {
+            // Never let a scheduled failure propagate and stop future executions.
+            log.error("Scheduled reservation expiry failed: {}", e.getMessage(), e);
+        }
     }
 }
