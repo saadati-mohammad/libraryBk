@@ -5,6 +5,7 @@ import ir.iau.library.dto.PersonFilterDto;
 import ir.iau.library.entity.Person;
 import ir.iau.library.service.EntityMapper;
 import ir.iau.library.service.PersonService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -53,7 +54,7 @@ public class PersonController {
 
     @PostMapping(consumes = {"multipart/form-data"})
     public ResponseEntity<PersonDto> createPerson(
-            @RequestPart("person") Person person,
+            @Valid @RequestPart("person") Person person,
             @RequestPart(value = "profilePicture", required = false) MultipartFile profilePicture) throws IOException {
         Person createdPerson = personService.createPerson(person, profilePicture);
         return ResponseEntity.status(HttpStatus.CREATED).body(entityMapper.toDto(createdPerson));
@@ -62,7 +63,7 @@ public class PersonController {
     @PutMapping(value = "/{id}", consumes = {"multipart/form-data"})
     public ResponseEntity<PersonDto> updatePerson(
             @PathVariable Long id,
-            @RequestPart("person") Person personDetails,
+            @Valid @RequestPart("person") Person personDetails,
             @RequestPart(value = "profilePicture", required = false) MultipartFile profilePicture) throws IOException {
         Person updatedPerson = personService.updatePerson(id, personDetails, profilePicture);
         return ResponseEntity.ok(entityMapper.toDto(updatedPerson));

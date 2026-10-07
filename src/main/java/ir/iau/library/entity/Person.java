@@ -3,6 +3,9 @@ package ir.iau.library.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import ir.iau.library.dto.PersonFilterDto;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.envers.Audited;
 
@@ -26,12 +29,23 @@ public class Person {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "نام الزامی است")
+    @Size(max = 100, message = "نام نمی‌تواند بیش از ۱۰۰ کاراکتر باشد")
     private String firstName;
+
+    @NotBlank(message = "نام خانوادگی الزامی است")
+    @Size(max = 100, message = "نام خانوادگی نمی‌تواند بیش از ۱۰۰ کاراکتر باشد")
     private String lastName;
 
+    // These mirror the DB NOT NULL / unique constraints so an invalid payload fails
+    // fast with a 400 (via GlobalExceptionHandler) instead of surfacing as an opaque
+    // 500 from the H2 constraint violation.
+    @NotBlank(message = "ایمیل الزامی است")
+    @Email(message = "قالب ایمیل نامعتبر است")
     @Column(nullable = false)
     private String email;
 
+    @NotBlank(message = "کد ملی الزامی است")
     @Column(nullable = false)
     private String nationalId; // کد ملی، یک فیلد مهم و منحصر به فرد
 
