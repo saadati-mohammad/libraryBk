@@ -149,4 +149,74 @@ class BookLoanServiceTest {
         assertThatThrownBy(() -> service.createLoan(request))
                 .isInstanceOf(EntityNotFoundException.class);
     }
+
+    @Test
+    void createLoan_throwsWhenBookMissing() {
+        CreateLoanRequestDto request = new CreateLoanRequestDto();
+        request.setPersonId(1L);
+        request.setBookId(99L);
+
+        when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
+        when(bookRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.createLoan(request))
+                .isInstanceOf(EntityNotFoundException.class);
+
+        verify(loanRepository, never()).save(any());
+    }
+
+    @Test
+    void returnBook_marksLoanReturnedAndSetsReturnDate() {
+        BookLoan loan = BookLoan.builder()
+                .id(9L)
+                .person(activePerson)
+                .book(book)
+                .loanDate(LocalDate.now().minusDays(3))
+                .dueDate(LocalDate.now().plusDays(11))
+                .status(LoanStatus.ON_LOAN)
+                .build();
+
+        when(loanRepository.findById(9L)).thenReturn(Optional.of(loan));
+        when(loanRepository.save(any(BookLoan.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        BookLoanDto result = service.returnBook(9L);
+
+        ArgumentCaptor<BookLoan> captor = ArgumentCaptor.forClass(BookLoan.class);
+        verify(loanRepository).save(captor.capture());
+        BookLoan saved = captor.getValue();
+
+        assertThat(saved.getStatus()).isEqualTo(LoanStatus.RETURNED);
+        assertThat(saved.getReturnDate()).isEqualTo(LocalDate.now());
+        assertThat(result.getStatus()).isEqualTo(LoanStatus.RETURNED);
+        assertThat(result.getReturnDate()).isEqualTo(LocalDate.now());
+    }
+
+    @Test
+    void returnBook_rejectsAlreadyReturnedLoan() {
+        BookLoan returned = BookLoan.builder()
+                .id(9L)
+                .person(activePerson)
+                .book(book)
+                .status(LoanStatus.RETURNED)
+                .returnDate(LocalDate.now().minusDays(1))
+                .build();
+
+        when(loanRepository.findById(9L)).thenReturn(Optional.of(returned));
+
+        assertThatThrownBy(() -> service.returnBook(9L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already been returned");
+
+        verify(loanRepository, never()).save(any());
+    }
+
+    @Test
+    void returnBook_throwsWhenLoanMissing() {
+        when(loanRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.returnBook(404L))
+                .isInstanceOf(EntityNotFoundException.class);
+
+        verify(loanRepository, never()).save(any());
+    }
 }
