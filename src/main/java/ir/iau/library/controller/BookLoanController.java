@@ -4,6 +4,7 @@ import ir.iau.library.dto.BookLoanDto;
 import ir.iau.library.dto.BookLoanFilterDto;
 import ir.iau.library.dto.CreateLoanRequestDto;
 import ir.iau.library.service.BookLoanService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,7 +26,7 @@ public class BookLoanController {
     }
 
     @PostMapping
-    public ResponseEntity<BookLoanDto> createLoan(@RequestBody CreateLoanRequestDto request) {
+    public ResponseEntity<BookLoanDto> createLoan(@Valid @RequestBody CreateLoanRequestDto request) {
         BookLoanDto createdLoan = loanService.createLoan(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdLoan);
     }

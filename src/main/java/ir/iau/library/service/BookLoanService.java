@@ -34,7 +34,9 @@ public class BookLoanService {
     public BookLoanDto createLoan(CreateLoanRequestDto request) {
         Person person = personRepository.findById(request.getPersonId())
                 .orElseThrow(() -> new EntityNotFoundException("Person not found"));
-        Book book = bookRepository.findById(request.getBookId())
+        // Pessimistic lock on the book so the availability check and the insert below
+        // are atomic: two concurrent requests for the same book cannot both succeed.
+        Book book = bookRepository.findByIdForUpdate(request.getBookId())
                 .orElseThrow(() -> new EntityNotFoundException("Book not found"));
 
         // Business rule: Person must be active
