@@ -122,9 +122,8 @@ public class FileService {
         // against the configured upload root and refuse anything that escapes it (guards against
         // a tampered DB row or a future bug). Uses the canonical path so symlinks/`..` cannot
         // walk outside the intended storage directory.
-        Path uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
-        Path filePath = Paths.get(fileAttachment.getFilePath()).toAbsolutePath().normalize();
-        if (!filePath.startsWith(uploadRoot)) {
+        Path filePath = resolveWithinUploadRoot(fileAttachment.getFilePath());
+        if (filePath == null) {
             log.error("Refusing to serve file {} outside the upload root", fileId);
             throw new Exception("File not found");
         }
@@ -181,8 +180,12 @@ public class FileService {
             FileAttachment fileAttachment = fileAttachmentRepository.findById(fileId)
                     .orElseThrow(() -> new Exception("File not found"));
 
-            // حذف فایل از دیسک
-            Path filePath = Paths.get(fileAttachment.getFilePath());
+            // حذف فایل از دیسک (فقط داخل پوشهٔ آپلود — همان بررسی امنیتی مسیر در downloadFile)
+            Path filePath = resolveWithinUploadRoot(fileAttachment.getFilePath());
+            if (filePath == null) {
+                log.error("Refusing to delete file {} outside the upload root", fileId);
+                return ApiResponse.error("File not found");
+            }
             if (Files.exists(filePath)) {
                 Files.delete(filePath);
                 log.info("File deleted from disk: {}", filePath);
@@ -228,6 +231,21 @@ public class FileService {
             log.error("Error getting file stats: {}", e.getMessage(), e);
             return ApiResponse.error("Failed to retrieve file statistics");
         }
+    }
+
+    /**
+     * Resolves a stored file path against the configured upload root and returns the
+     * normalized absolute path only if it stays inside that root. Returns {@code null}
+     * when the path escapes the root (guards against a tampered DB row or a future bug).
+     * Uses absolute+normalize so {@code ..} and symlink targets cannot walk outside.
+     */
+    private Path resolveWithinUploadRoot(String storedPath) {
+        if (storedPath == null || storedPath.isBlank()) {
+            return null;
+        }
+        Path uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path filePath = Paths.get(storedPath).toAbsolutePath().normalize();
+        return filePath.startsWith(uploadRoot) ? filePath : null;
     }
 
     /**
@@ -339,9 +357,9 @@ public class FileService {
             List<FileAttachment> incompleteFiles = fileAttachmentRepository.findIncompleteUploads();
 
             for (FileAttachment file : incompleteFiles) {
-                // حذف فایل از دیسک اگر وجود دارد
-                Path filePath = Paths.get(file.getFilePath());
-                if (Files.exists(filePath)) {
+                // حذف فایل از دیسک اگر وجود دارد (با همان بررسی مرز پوشهٔ آپلود)
+                Path filePath = resolveWithinUploadRoot(file.getFilePath());
+                if (filePath != null && Files.exists(filePath)) {
                     Files.delete(filePath);
                 }
 
