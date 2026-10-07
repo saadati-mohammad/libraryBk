@@ -1,7 +1,9 @@
 package ir.iau.library.controller;
 
+import ir.iau.library.dto.PersonDto;
 import ir.iau.library.dto.PersonFilterDto;
 import ir.iau.library.entity.Person;
+import ir.iau.library.service.EntityMapper;
 import ir.iau.library.service.PersonService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+
 @RestController
 @RequestMapping("/api/person")
 public class PersonController {
@@ -21,8 +24,11 @@ public class PersonController {
     @Autowired
     private PersonService personService;
 
+    @Autowired
+    private EntityMapper entityMapper;
+
     @GetMapping
-    public Page<Person> listPersons(
+    public Page<PersonDto> listPersons(
             PersonFilterDto filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -33,31 +39,33 @@ public class PersonController {
         Sort sortOrder = Sort.by(direction, sortParts[0]);
         Pageable pageable = PageRequest.of(page, size, sortOrder);
 
-        return personService.findAllFiltered(filter, pageable);
+        // Map to DTOs so the LONGBLOB profile picture is never serialized into list responses.
+        return entityMapper.toPersonDtoPage(personService.findAllFiltered(filter, pageable));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Person> getPerson(@PathVariable Long id) {
+    public ResponseEntity<PersonDto> getPerson(@PathVariable Long id) {
         return personService.getPersonById(id)
+                .map(entityMapper::toDto)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping(consumes = {"multipart/form-data"})
-    public ResponseEntity<Person> createPerson(
+    public ResponseEntity<PersonDto> createPerson(
             @RequestPart("person") Person person,
             @RequestPart(value = "profilePicture", required = false) MultipartFile profilePicture) throws IOException {
         Person createdPerson = personService.createPerson(person, profilePicture);
-        return ResponseEntity.status(HttpStatus.CREATED).body(createdPerson);
+        return ResponseEntity.status(HttpStatus.CREATED).body(entityMapper.toDto(createdPerson));
     }
 
     @PutMapping(value = "/{id}", consumes = {"multipart/form-data"})
-    public ResponseEntity<Person> updatePerson(
+    public ResponseEntity<PersonDto> updatePerson(
             @PathVariable Long id,
             @RequestPart("person") Person personDetails,
             @RequestPart(value = "profilePicture", required = false) MultipartFile profilePicture) throws IOException {
         Person updatedPerson = personService.updatePerson(id, personDetails, profilePicture);
-        return ResponseEntity.ok(updatedPerson);
+        return ResponseEntity.ok(entityMapper.toDto(updatedPerson));
     }
 
     @DeleteMapping("/{id}")

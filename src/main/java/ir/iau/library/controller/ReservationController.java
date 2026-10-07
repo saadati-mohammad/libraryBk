@@ -1,7 +1,8 @@
 package ir.iau.library.controller;
 
-
+import ir.iau.library.dto.ReservationDto;
 import ir.iau.library.entity.Reservation;
+import ir.iau.library.service.EntityMapper;
 import ir.iau.library.service.ReservationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -18,24 +19,27 @@ import java.util.List;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final EntityMapper entityMapper;
 
     @PostMapping
-    public ResponseEntity<Reservation> createReservation(
+    public ResponseEntity<ReservationDto> createReservation(
             @RequestParam Long personId,
             @RequestParam Long bookId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate expiryDate) {
         Reservation reservation = reservationService.createReservation(personId, bookId, expiryDate);
-        return ResponseEntity.status(HttpStatus.CREATED).body(reservation);
+        return ResponseEntity.status(HttpStatus.CREATED).body(entityMapper.toDto(reservation));
     }
 
     @PutMapping("/{id}/fulfill")
-    public ResponseEntity<Reservation> fulfillReservation(@PathVariable Long id) {
+    public ResponseEntity<ReservationDto> fulfillReservation(@PathVariable Long id) {
         Reservation updated = reservationService.fulfillReservation(id);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(entityMapper.toDto(updated));
     }
 
     @GetMapping("/active")
-    public List<Reservation> listActive() {
-        return reservationService.getActiveReservations();
+    public List<ReservationDto> listActive() {
+        return reservationService.getActiveReservations().stream()
+                .map(entityMapper::toDto)
+                .toList();
     }
 }
