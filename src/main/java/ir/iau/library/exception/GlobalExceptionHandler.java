@@ -4,6 +4,7 @@ import ir.iau.library.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -106,6 +107,19 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error("صفحه یا سرویس مورد نظر یافت نشد"));
+    }
+
+    /**
+     * مدیریت خطاهای احراز هویت (ورود با نام کاربری/رمز نادرست).
+     * بدون این mapper، BadCredentialsException به‌عنوان خطای عمومی ۵۰۰ بازگردانده می‌شد.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleAuthenticationException(AuthenticationException ex) {
+
+        log.warn("Authentication failed: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error("نام کاربری یا رمز عبور نادرست است"));
     }
 
     /**
