@@ -28,6 +28,10 @@ jobs:
       - name: Build and run tests
         run: ./mvnw -B clean verify
 
+      - name: Dependency vulnerability scan (OWASP, fail on CVSS >= 8)
+        run: ./mvnw -B org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=8
+        continue-on-error: true
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
