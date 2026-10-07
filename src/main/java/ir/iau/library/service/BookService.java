@@ -75,15 +75,21 @@ public class BookService {
         return bookRepository.save(book);
     }
 
-//    public void softDeleteBook(Long id) {
-//        Book book = bookRepository.findById(id)
-//                .orElseThrow(() -> new EntityNotFoundException("Book not found with id " + id));
-//        book.setActive(false);
-//        bookRepository.save(book);
-//    }
-
+    /**
+     * Soft-deletes a book by flipping its {@code active} flag.
+     *
+     * <p>A hard delete was destructive here: {@link Book#getLoans()} is mapped with
+     * {@code cascade = ALL, orphanRemoval = true}, so removing the book also removed its
+     * entire loan history (the library audit trail) and could fail with an FK violation
+     * when loans referenced it. The {@code active} flag already exists and is honoured by
+     * {@link ir.iau.library.specification.BookSpecification}, so deactivation preserves
+     * history while hiding the book from active listings.
+     */
     public void deleteBookById(Long id) {
-        bookRepository.deleteById(id);
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Book not found with id " + id));
+        book.setActive(false);
+        bookRepository.save(book);
     }
 
     public Optional<Book> getBookById(Long id) {
