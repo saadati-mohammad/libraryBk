@@ -86,8 +86,9 @@ public class ExcelImportService {
                 }
 
                 String pageCountStr = getCellValueAsString(row.getCell(12), dataFormatter);
-                if (pageCountStr != null && !pageCountStr.isEmpty()) {
-                    bookDto.setPageCount((int) Double.parseDouble(pageCountStr));
+                Integer pageCount = parseIntegerCell(pageCountStr, row.getRowNum(), "pageCount");
+                if (pageCount != null) {
+                    bookDto.setPageCount(pageCount);
                 }
 
                 bookDto.setLanguage(getCellValueAsString(row.getCell(13), dataFormatter));
@@ -99,8 +100,9 @@ public class ExcelImportService {
                 }
 
                 String copyCountStr = getCellValueAsString(row.getCell(16), dataFormatter);
-                if (copyCountStr != null && !copyCountStr.isEmpty()) {
-                    bookDto.setCopyCount((int) Double.parseDouble(copyCountStr));
+                Integer copyCount = parseIntegerCell(copyCountStr, row.getRowNum(), "copyCount");
+                if (copyCount != null) {
+                    bookDto.setCopyCount(copyCount);
                 }
 
                 bookDto.setLibrarySection(getCellValueAsString(row.getCell(17), dataFormatter));
@@ -132,6 +134,23 @@ public class ExcelImportService {
         }
         // از DataFormatter برای تبدیل امن هر نوع داده به رشته استفاده می‌کنیم
         return dataFormatter.formatCellValue(cell).trim();
+    }
+
+    /**
+     * تبدیل امن مقدار یک سلول به عدد صحیح.
+     * سلول خالی/غیرعددی مقدار null برمی‌گرداند (بدون پرتاب استثنا) تا یک سلول بدفرمت
+     * کل ایمپورت را متوقف نکند. مقدار اعشاری (مثل ۳۰۰.۰ از اکسل) به نزدیک‌ترین عدد صحیح گرد می‌شود.
+     */
+    private Integer parseIntegerCell(String value, int rowNum, String fieldName) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        try {
+            return (int) Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            System.err.println("Could not parse " + fieldName + ": '" + value + "' at row " + rowNum);
+            return null;
+        }
     }
 
     /**
