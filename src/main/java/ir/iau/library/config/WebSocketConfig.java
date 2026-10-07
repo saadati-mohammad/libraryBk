@@ -133,15 +133,4 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(stompAuthChannelInterceptor);
     }
-
-    /**
-     * Register the STOMP authentication interceptor on the inbound channel so every
-     * CONNECT/SUBSCRIBE/SEND frame is authenticated and identity-checked before it reaches
-     * a controller. This is what makes the WebSocket layer stop trusting client-supplied
-     * usernames.
-     */
-    @Override
-    public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(stompAuthChannelInterceptor);
-    }
 }
