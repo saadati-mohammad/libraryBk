@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/messages")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*")
 public class MessageController {
 
     private final MessageService messageService;
@@ -48,9 +47,10 @@ public class MessageController {
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            // Log the full detail server-side; never echo internal exception text to clients.
             log.error("Error searching messages: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("خطا در جستجوی پیام‌ها: " + e.getMessage()));
+                    .body(ApiResponse.error("خطا در جستجوی پیام‌ها"));
         }
     }
 
@@ -76,7 +76,7 @@ public class MessageController {
         } catch (Exception e) {
             log.error("Error getting conversation: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("خطا در دریافت مکالمه: " + e.getMessage()));
+                    .body(ApiResponse.error("خطا در دریافت مکالمه"));
         }
     }
 
@@ -95,7 +95,7 @@ public class MessageController {
         } catch (Exception e) {
             log.error("Error updating message: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("خطا در به‌روزرسانی پیام: " + e.getMessage()));
+                    .body(ApiResponse.error("خطا در به‌روزرسانی پیام"));
         }
     }
 
@@ -109,7 +109,7 @@ public class MessageController {
         } catch (Exception e) {
             log.error("Error deleting message: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("خطا در حذف پیام: " + e.getMessage()));
+                    .body(ApiResponse.error("خطا در حذف پیام"));
         }
     }
 
@@ -123,7 +123,7 @@ public class MessageController {
         } catch (Exception e) {
             log.error("Error marking message as read: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("خطا در علامت‌گذاری پیام: " + e.getMessage()));
+                    .body(ApiResponse.error("خطا در علامت‌گذاری پیام"));
         }
     }
 }

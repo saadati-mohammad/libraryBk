@@ -20,7 +20,6 @@ import java.util.List;
 @RequestMapping("/api/v1/files")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*")
 public class FileController {
 
     private final FileService fileService;
