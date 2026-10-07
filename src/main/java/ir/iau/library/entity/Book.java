@@ -39,9 +39,12 @@ public class Book {
     private Integer pageCount;
     private String language;
 
+    // @Lob byte[] already maps to a large-object column. The previous
+    // columnDefinition="LONGBLOB" conflicted with H2 (which reports the column as
+    // BLOB) and broke schema validation once ddl-auto=validate was enabled.
     @Lob
     @Basic(fetch = FetchType.LAZY)
-    @Column(name = "book_cover_file", columnDefinition = "LONGBLOB")
+    @Column(name = "book_cover_file")
     private byte[] bookCoverFile;
 
     private String edition;

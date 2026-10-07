@@ -53,6 +53,16 @@
             <version>3.4.5</version>
         </dependency>
 
+        <!-- Schema migrations. Replaces ddl-auto=update so schema changes are
+             versioned, reviewable and reversible in production. -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <!-- flyway-core 10.20.1 already bundles the H2 database support
+                 (org.flywaydb.core.internal.database.h2), so no separate
+                 flyway-database-h2 module is required. -->
+        </dependency>
+
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>

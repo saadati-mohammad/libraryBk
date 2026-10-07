@@ -76,7 +76,8 @@ class BookLoanServiceTest {
         request.setNotes("first edition");
 
         when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
-        when(bookRepository.findById(2L)).thenReturn(Optional.of(book));
+        // createLoan now takes a pessimistic lock on the book, so it calls findByIdForUpdate.
+        when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(book));
         when(loanRepository.findActiveLoanByBook(book)).thenReturn(Optional.empty());
         when(loanRepository.save(any(BookLoan.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -111,7 +112,7 @@ class BookLoanServiceTest {
         request.setBookId(2L);
 
         when(personRepository.findById(1L)).thenReturn(Optional.of(inactive));
-        when(bookRepository.findById(2L)).thenReturn(Optional.of(book));
+        when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(book));
 
         assertThatThrownBy(() -> service.createLoan(request))
                 .isInstanceOf(IllegalStateException.class)
@@ -127,7 +128,7 @@ class BookLoanServiceTest {
         request.setBookId(2L);
 
         when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
-        when(bookRepository.findById(2L)).thenReturn(Optional.of(book));
+        when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(book));
         when(loanRepository.findActiveLoanByBook(book))
                 .thenReturn(Optional.of(BookLoan.builder().id(9L).status(LoanStatus.ON_LOAN).build()));
 

@@ -44,9 +44,11 @@ public class Person {
     @Column(length = 2000)
     private String notes; // یادداشت های اضافی درباره عضو
 
+    // @Lob byte[] already maps to a large-object column; see the note on
+    // Book.bookCoverFile for why columnDefinition="LONGBLOB" was removed.
     @Lob
     @Basic(fetch = FetchType.LAZY)
-    @Column(name = "profile_picture", columnDefinition = "LONGBLOB")
+    @Column(name = "profile_picture")
     private byte[] profilePicture; // عکس پروفایل
 
     private Boolean active = true; // فلگ برای غیرفعال سازی
