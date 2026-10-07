@@ -130,7 +130,34 @@ public class GlobalExceptionHandler {
         log.warn("Illegal argument: {}", ex.getMessage());
 
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error("پارامتر ورودی نامعتبر: " + ex.getMessage()));
+                .body(ApiResponse.error("پارامتر ورودی نامعتبر"));
+    }
+
+    /**
+     * مدیریت خطاهای نقض قوانین کسب‌وکار (مثلاً امانت کتابی که در امانت است یا
+     * عضوی که غیرفعال است). این خطاها تقاضای نامعتبر هستند، نه خطای سرور.
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIllegalStateException(
+            IllegalStateException ex) {
+
+        log.warn("Business rule violation: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * مدیریت موجودیت یافت‌نشده (مثلاً کتاب یا عضو ناموجود).
+     */
+    @ExceptionHandler(jakarta.persistence.EntityNotFoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handleEntityNotFound(
+            jakarta.persistence.EntityNotFoundException ex) {
+
+        log.warn("Entity not found: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(ex.getMessage()));
     }
 
     /**
@@ -167,7 +194,7 @@ public class GlobalExceptionHandler {
         log.warn("File processing error: {}", ex.getMessage());
 
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error("خطا در پردازش فایل: " + ex.getMessage()));
+                .body(ApiResponse.error("خطا در پردازش فایل"));
     }
 
     /**
@@ -180,7 +207,7 @@ public class GlobalExceptionHandler {
         log.warn("Message processing error: {}", ex.getMessage());
 
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error("خطا در پردازش پیام: " + ex.getMessage()));
+                .body(ApiResponse.error("خطا در پردازش پیام"));
     }
 }
 
