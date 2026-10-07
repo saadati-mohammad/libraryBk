@@ -88,8 +88,7 @@ public class BookService {
     public void deleteBookById(Long id) {
         Book book = bookRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Book not found with id " + id));
-        book.setActive(false);
-        bookRepository.save(book);
+        bookRepository.delete(book);
     }
 
     public Optional<Book> getBookById(Long id) {
