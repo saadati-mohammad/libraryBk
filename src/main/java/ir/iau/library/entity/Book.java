@@ -3,6 +3,9 @@ package ir.iau.library.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import ir.iau.library.dto.BookFilterDto;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.envers.Audited;
 
@@ -22,21 +25,39 @@ public class Book {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // The book form marks these required; mirroring the contract here means an invalid
+    // payload fails fast with a 400 (via GlobalExceptionHandler) instead of being persisted
+    // with a blank title/author. The entity is bound directly from the request, so the
+    // constraints live where the binding happens.
+    @NotBlank(message = "عنوان کتاب الزامی است")
+    @Size(max = 255, message = "عنوان کتاب نمی‌تواند بیش از ۲۵۵ کاراکتر باشد")
     private String title;
+
+    @NotBlank(message = "نام نویسنده الزامی است")
+    @Size(max = 255, message = "نام نویسنده نمی‌تواند بیش از ۲۵۵ کاراکتر باشد")
     private String author;
+
     private String translator;
     private String publisher;
+
+    @NotBlank(message = "شابک ۱۰ الزامی است")
     private String isbn10;
+
     private String isbn13;
     @Column(length = 2000)
     private String description;
     private String deweyDecimal;
     private String congressClassification;
+    @NotBlank(message = "موضوع الزامی است")
     private String subject;
+
     @Column(length = 2000)
     private String summary;
     private LocalDate publicationDate;
+
+    @Min(value = 1, message = "تعداد صفحات باید حداقل ۱ باشد")
     private Integer pageCount;
+
     private String language;
 
     // @Lob byte[] already maps to a large-object column. The previous
@@ -48,7 +69,10 @@ public class Book {
     private byte[] bookCoverFile;
 
     private String edition;
+
+    @Min(value = 0, message = "تعداد نسخه‌ها نمی‌تواند منفی باشد")
     private Integer copyCount;
+
     private String librarySection; // بخش کتابخانه (مثلاً: علوم انسانی، مهندسی)
     private String shelfCode;      // کد یا شماره قفسه (مثلاً: A3, B5)
     private String rowNumbers;      // ردیف (مثلاً: ردیف 2)

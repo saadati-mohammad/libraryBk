@@ -5,6 +5,7 @@ import ir.iau.library.dto.BookFilterDto;
 import ir.iau.library.entity.Book;
 import ir.iau.library.service.BookService;
 import ir.iau.library.service.EntityMapper;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -52,7 +53,7 @@ public class BookController {
 
     @PostMapping(consumes = {"multipart/form-data"})
     public ResponseEntity<BookDto> createBook(
-            @RequestPart("book") Book book,
+            @Valid @RequestPart("book") Book book,
             @RequestPart(value = "bookCoverFile", required = false) MultipartFile bookCoverFile
     ) throws IOException {
         Book created = bookService.createBook(book, bookCoverFile);
@@ -62,7 +63,7 @@ public class BookController {
     @PutMapping(value = "/{id}", consumes = {"multipart/form-data"})
     public ResponseEntity<BookDto> updateBook(
             @PathVariable Long id,
-            @RequestPart("book") Book book,
+            @Valid @RequestPart("book") Book book,
             @RequestPart(value = "bookCoverFile", required = false) MultipartFile bookCoverFile
     ) throws IOException {
         Book updated = bookService.updateBook(id, book, bookCoverFile);
