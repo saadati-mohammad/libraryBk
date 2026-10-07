@@ -68,6 +68,10 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
     @Query("SELECT m FROM Message m WHERE m.priority IN ('high', 'urgent') AND m.isActive = true ORDER BY m.createDate DESC")
     Page<Message> findHighPriorityMessages(Pageable pageable);
 
+    // شمارش پیام‌های اولویت بالا بدون بارگذاری تمام ردیف‌ها
+    @Query("SELECT COUNT(m) FROM Message m WHERE m.priority IN ('high', 'urgent') AND m.isActive = true")
+    long countHighPriorityMessages();
+
     // پیام‌های حذف شده
     @Query("SELECT m FROM Message m WHERE m.deleteDate IS NOT NULL ORDER BY m.deleteDate DESC")
     Page<Message> findDeletedMessages(Pageable pageable);

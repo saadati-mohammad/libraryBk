@@ -335,9 +335,12 @@ public class MessageService {
             log.info("Getting message stats for user: {}", username);
 
             Object[] stats = messageRepository.getMessageStats(username);
-            Long sentCount = stats[0] instanceof Long ? (Long) stats[0] : 0L;
-            Long receivedCount = stats[1] instanceof Long ? (Long) stats[1] : 0L;
-            Long unreadCount = stats[2] instanceof Long ? (Long) stats[2] : 0L;
+            // The aggregate query returns one row of COUNT(...) values. Guard against a
+            // null/empty result (user with no messages) and against drivers that surface
+            // COUNT as Integer/BigInteger rather than Long.
+            Long sentCount = stats != null && stats.length > 0 ? toLong(stats[0]) : 0L;
+            Long receivedCount = stats != null && stats.length > 1 ? toLong(stats[1]) : 0L;
+            Long unreadCount = stats != null && stats.length > 2 ? toLong(stats[2]) : 0L;
 
             // --- START OF CHANGES ---
 
@@ -350,7 +353,9 @@ public class MessageService {
 
             // --- END OF CHANGES ---
 
-            List<Message> highPriorityMessages = messageRepository.findHighPriorityMessages(PageRequest.of(0, Integer.MAX_VALUE)).getContent();
+            // Use a bounded page instead of Integer.MAX_VALUE, which forces the DB to
+            // materialize every high-priority row just to count them.
+            long highPriorityCount = messageRepository.countHighPriorityMessages();
 
             MessageStats messageStats = MessageStats.builder()
                     .sentCount(sentCount)
@@ -358,7 +363,7 @@ public class MessageService {
                     .unreadCount(unreadCount)
                     .totalCount(sentCount + receivedCount)
                     .todayCount((long) todayMessages.size())
-                    .highPriorityCount((long) highPriorityMessages.size())
+                    .highPriorityCount(highPriorityCount)
                     .build();
 
             return ApiResponse.success(messageStats);
@@ -366,6 +371,23 @@ public class MessageService {
         } catch (Exception e) {
             log.error("Error getting message stats: {}", e.getMessage(), e);
             return ApiResponse.error("Failed to retrieve message statistics");
+        }
+    }
+
+    /**
+     * Safely coerces a numeric aggregate result (Long/Integer/BigInteger/Number) to Long.
+     */
+    private static Long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            return 0L;
         }
     }
 }
