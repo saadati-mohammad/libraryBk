@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -23,6 +24,34 @@ import java.util.List;
 public class FileController {
 
     private final FileService fileService;
+
+    /**
+     * Builds an RFC 6266-compliant {@code filename} parameter for Content-Disposition.
+     *
+     * <p>The stored original filename is attacker-controlled at upload time. Interpolating it
+     * raw into the header allowed quote/CR/LF injection (response-splitting / header injection).
+     * Here control characters and quotes are stripped for the ASCII fallback, and the full
+     * value is also provided via {@code filename*} using percent-encoding, which is the
+     * standard way to carry arbitrary filenames safely.
+     */
+    private String buildContentDisposition(String originalName) {
+        String safe = (originalName == null || originalName.isBlank()) ? "download" : originalName;
+        // ASCII fallback: drop control chars, quotes and backslashes; keep it conservative.
+        String asciiFallback = safe.replaceAll("[\\r\\n\\t\\u0000-\\u001f\"\\\\]", "_");
+        // RFC 5987 percent-encoded UTF-8 form for the real name.
+        StringBuilder encoded = new StringBuilder();
+        for (byte b : safe.getBytes(StandardCharsets.UTF_8)) {
+            int c = b & 0xFF;
+            boolean unreserved = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~';
+            if (unreserved) {
+                encoded.append((char) c);
+            } else {
+                encoded.append('%').append(String.format("%02X", c));
+            }
+        }
+        return "filename=\"" + asciiFallback + "\"; filename*=UTF-8''" + encoded;
+    }
 
     /**
      * آپلود فایل ضمیمه
@@ -83,7 +112,7 @@ public class FileController {
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(fileInfo.getContentType()))
                     .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"" + fileInfo.getOriginalFileName() + "\"")
+                            "attachment; " + buildContentDisposition(fileInfo.getOriginalFileName()))
                     .body(resource);
 
         } catch (Exception e) {

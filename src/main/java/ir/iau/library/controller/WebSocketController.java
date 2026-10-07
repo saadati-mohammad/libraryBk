@@ -12,6 +12,8 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Controller;
 
+import java.security.Principal;
+
 @Controller
 @RequiredArgsConstructor
 @Slf4j
@@ -21,16 +23,40 @@ public class WebSocketController {
     private final MessageService messageService;
 
     /**
+     * Resolves the authenticated STOMP principal set by
+     * {@link ir.iau.library.security.StompAuthChannelInterceptor} on CONNECT.
+     *
+     * <p>The client-supplied {@code sender} field is never trusted: every handler derives the
+     * acting identity from this principal. Returns {@code null} (and logs) when the frame is
+     * somehow unauthenticated, so the caller can abort.
+     */
+    private String authenticatedUser(SimpMessageHeaderAccessor headerAccessor, WebSocketMessage message) {
+        Principal principal = headerAccessor.getUser();
+        if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
+            log.warn("Rejected unauthenticated WebSocket frame (type={}, claimedSender={})",
+                    message.getMessageType(), message.getSender());
+            return null;
+        }
+        return principal.getName();
+    }
+
+    /**
      * ارسال پیام خصوصی بین دو کاربر - اصلاح شده برای حل مشکل ارسال دوبار
      */
     @MessageMapping("/chat.send")
     public void sendMessage(@Payload WebSocketMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String sender = authenticatedUser(headerAccessor, message);
+        if (sender == null) {
+            return;
+        }
         try {
+            // The authenticated identity always wins over any client-supplied sender.
+            message.setSender(sender);
             log.info("Received WebSocket message from: {} to: {}", message.getSender(), message.getRecipient());
 
             // تبدیل WebSocketMessage به MessageSendRequest
             MessageSendRequest sendRequest = MessageSendRequest.builder()
-                    .sender(message.getSender())
+                    .sender(sender)
                     .senderFarsiTitle(message.getSenderFarsiTitle())
                     .recipient(message.getRecipient())
                     .recipientFarsiTitle(message.getRecipientFarsiTitle())
@@ -56,7 +82,7 @@ public class WebSocketController {
                 // ارسال تأیید به فرستنده با وضعیت 'sent'
                 WebSocketMessage confirmationMessage = WebSocketMessage.builder()
                         .id(message.getId())
-                        .sender(message.getSender())
+                        .sender(sender)
                         .senderFarsiTitle(message.getSenderFarsiTitle())
                         .recipient(message.getRecipient())
                         .recipientFarsiTitle(message.getRecipientFarsiTitle())
@@ -71,7 +97,7 @@ public class WebSocketController {
                         .enableSendSms(message.getEnableSendSms())
                         .build();
 
-                webSocketService.sendMessageToUser(message.getSender(), confirmationMessage);
+                webSocketService.sendMessageToUser(sender, confirmationMessage);
 
                 log.info("Message sent successfully via WebSocket with ID: {}", response.getData().getId());
             } else {
@@ -83,7 +109,7 @@ public class WebSocketController {
                         .timestamp(System.currentTimeMillis())
                         .build();
 
-                webSocketService.sendMessageToUser(message.getSender(), errorMessage);
+                webSocketService.sendMessageToUser(sender, errorMessage);
                 log.error("Failed to send message via WebSocket: {}", response.getMessage());
             }
 
@@ -97,7 +123,7 @@ public class WebSocketController {
                     .timestamp(System.currentTimeMillis())
                     .build();
 
-            webSocketService.sendMessageToUser(message.getSender(), errorMessage);
+            webSocketService.sendMessageToUser(sender, errorMessage);
         }
     }
 
@@ -106,13 +132,18 @@ public class WebSocketController {
      */
     @MessageMapping("/chat.edit")
     public void editMessage(@Payload WebSocketMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String sender = authenticatedUser(headerAccessor, message);
+        if (sender == null) {
+            return;
+        }
         try {
+            message.setSender(sender);
             log.info("Received edit request for message: {} by user: {}",
-                    message.getOriginalMessageId(), message.getSender());
+                    message.getOriginalMessageId(), sender);
 
             if (message.getOriginalMessageId() == null) {
                 log.error("Original message ID is required for edit operation");
-                sendErrorToUser(message.getSender(), "شناسه پیام برای ویرایش الزامی است");
+                sendErrorToUser(sender, "شناسه پیام برای ویرایش الزامی است");
                 return;
             }
 
@@ -120,15 +151,15 @@ public class WebSocketController {
             var existingMessage = messageService.getMessageById(Long.parseLong(message.getOriginalMessageId()));
             if (!existingMessage.isSuccess() || existingMessage.getData() == null) {
                 log.error("Message not found for edit: {}", message.getOriginalMessageId());
-                sendErrorToUser(message.getSender(), "پیام مورد نظر یافت نشد");
+                sendErrorToUser(sender, "پیام مورد نظر یافت نشد");
                 return;
             }
 
             // بررسی مالکیت
-            if (!existingMessage.getData().getSender().equals(message.getSender())) {
+            if (!existingMessage.getData().getSender().equals(sender)) {
                 log.error("User {} attempted to edit message owned by {}",
-                        message.getSender(), existingMessage.getData().getSender());
-                sendErrorToUser(message.getSender(), "شما فقط می‌توانید پیام‌های خود را ویرایش کنید");
+                        sender, existingMessage.getData().getSender());
+                sendErrorToUser(sender, "شما فقط می‌توانید پیام‌های خود را ویرایش کنید");
                 return;
             }
 
@@ -142,25 +173,25 @@ public class WebSocketController {
             if (response.isSuccess()) {
                 // ارسال پیام ویرایش شده به گیرنده
                 String recipientUsername = existingMessage.getData().getRecipient();
-                if (recipientUsername != null && !recipientUsername.equals(message.getSender())) {
+                if (recipientUsername != null && !recipientUsername.equals(sender)) {
                     webSocketService.sendMessageToUser(recipientUsername, message);
                 }
 
                 // ارسال تأیید به فرستنده
-                webSocketService.sendMessageToUser(message.getSender(), message);
+                webSocketService.sendMessageToUser(sender, message);
 
                 log.info("Message {} edited successfully via WebSocket", message.getOriginalMessageId());
             } else {
                 log.error("Failed to edit message via WebSocket: {}", response.getMessage());
-                sendErrorToUser(message.getSender(), "خطا در ویرایش پیام: " + response.getMessage());
+                sendErrorToUser(sender, "خطا در ویرایش پیام: " + response.getMessage());
             }
 
         } catch (NumberFormatException e) {
             log.error("Invalid message ID format: {}", message.getOriginalMessageId());
-            sendErrorToUser(message.getSender(), "شناسه پیام نامعتبر است");
+            sendErrorToUser(sender, "شناسه پیام نامعتبر است");
         } catch (Exception e) {
             log.error("Error editing message via WebSocket: {}", e.getMessage(), e);
-            sendErrorToUser(message.getSender(), "خطای داخلی سرور");
+            sendErrorToUser(sender, "خطای داخلی سرور");
         }
     }
 
@@ -169,13 +200,18 @@ public class WebSocketController {
      */
     @MessageMapping("/chat.delete")
     public void deleteMessage(@Payload WebSocketMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String sender = authenticatedUser(headerAccessor, message);
+        if (sender == null) {
+            return;
+        }
         try {
+            message.setSender(sender);
             log.info("Received delete request for message: {} by user: {}",
-                    message.getOriginalMessageId(), message.getSender());
+                    message.getOriginalMessageId(), sender);
 
             if (message.getOriginalMessageId() == null) {
                 log.error("Original message ID is required for delete operation");
-                sendErrorToUser(message.getSender(), "شناسه پیام برای حذف الزامی است");
+                sendErrorToUser(sender, "شناسه پیام برای حذف الزامی است");
                 return;
             }
 
@@ -183,15 +219,15 @@ public class WebSocketController {
             var existingMessage = messageService.getMessageById(Long.parseLong(message.getOriginalMessageId()));
             if (!existingMessage.isSuccess() || existingMessage.getData() == null) {
                 log.error("Message not found for delete: {}", message.getOriginalMessageId());
-                sendErrorToUser(message.getSender(), "پیام مورد نظر یافت نشد");
+                sendErrorToUser(sender, "پیام مورد نظر یافت نشد");
                 return;
             }
 
             // بررسی مالکیت
-            if (!existingMessage.getData().getSender().equals(message.getSender())) {
+            if (!existingMessage.getData().getSender().equals(sender)) {
                 log.error("User {} attempted to delete message owned by {}",
-                        message.getSender(), existingMessage.getData().getSender());
-                sendErrorToUser(message.getSender(), "شما فقط می‌توانید پیام‌های خود را حذف کنید");
+                        sender, existingMessage.getData().getSender());
+                sendErrorToUser(sender, "شما فقط می‌توانید پیام‌های خود را حذف کنید");
                 return;
             }
 
@@ -201,25 +237,25 @@ public class WebSocketController {
             if (response.isSuccess()) {
                 // ارسال اطلاع حذف به گیرنده
                 String recipientUsername = existingMessage.getData().getRecipient();
-                if (recipientUsername != null && !recipientUsername.equals(message.getSender())) {
+                if (recipientUsername != null && !recipientUsername.equals(sender)) {
                     webSocketService.sendMessageToUser(recipientUsername, message);
                 }
 
                 // ارسال تأیید به فرستنده
-                webSocketService.sendMessageToUser(message.getSender(), message);
+                webSocketService.sendMessageToUser(sender, message);
 
                 log.info("Message {} deleted successfully via WebSocket", message.getOriginalMessageId());
             } else {
                 log.error("Failed to delete message via WebSocket: {}", response.getMessage());
-                sendErrorToUser(message.getSender(), "خطا در حذف پیام: " + response.getMessage());
+                sendErrorToUser(sender, "خطا در حذف پیام: " + response.getMessage());
             }
 
         } catch (NumberFormatException e) {
             log.error("Invalid message ID format: {}", message.getOriginalMessageId());
-            sendErrorToUser(message.getSender(), "شناسه پیام نامعتبر است");
+            sendErrorToUser(sender, "شناسه پیام نامعتبر است");
         } catch (Exception e) {
             log.error("Error deleting message via WebSocket: {}", e.getMessage(), e);
-            sendErrorToUser(message.getSender(), "خطای داخلی سرور");
+            sendErrorToUser(sender, "خطای داخلی سرور");
         }
     }
 
@@ -240,9 +276,14 @@ public class WebSocketController {
      */
     @MessageMapping("/chat.markRead")
     public void markMessageAsRead(@Payload WebSocketMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String sender = authenticatedUser(headerAccessor, message);
+        if (sender == null) {
+            return;
+        }
         try {
+            message.setSender(sender);
             log.info("Marking message as read: {} by user: {}",
-                    message.getOriginalMessageId(), message.getSender());
+                    message.getOriginalMessageId(), sender);
 
             if (message.getOriginalMessageId() == null) {
                 log.error("Message ID is required for mark read operation");
@@ -259,7 +300,7 @@ public class WebSocketController {
                             .id(message.getId())
                             .originalMessageId(message.getOriginalMessageId())
                             .messageType("read_confirmation")
-                            .sender(message.getSender())
+                            .sender(sender)
                             .timestamp(System.currentTimeMillis())
                             .build();
 
@@ -283,12 +324,17 @@ public class WebSocketController {
      */
     @MessageMapping("/chat.typing")
     public void handleTyping(@Payload WebSocketMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String sender = authenticatedUser(headerAccessor, message);
+        if (sender == null) {
+            return;
+        }
         try {
-            log.debug("User {} is typing to {}", message.getSender(), message.getRecipient());
+            message.setSender(sender);
+            log.debug("User {} is typing to {}", sender, message.getRecipient());
 
             WebSocketMessage typingMessage = WebSocketMessage.builder()
                     .id(message.getId())
-                    .sender(message.getSender())
+                    .sender(sender)
                     .senderFarsiTitle(message.getSenderFarsiTitle())
                     .messageType("typing")
                     .timestamp(System.currentTimeMillis())
@@ -306,14 +352,19 @@ public class WebSocketController {
      */
     @MessageMapping("/chat.addUser")
     public void addUser(@Payload WebSocketMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String sender = authenticatedUser(headerAccessor, message);
+        if (sender == null) {
+            return;
+        }
         try {
-            log.info("User connecting: {}", message.getSender());
+            message.setSender(sender);
+            log.info("User connecting: {}", sender);
 
             if (headerAccessor.getSessionAttributes() != null) {
-                headerAccessor.getSessionAttributes().put("username", message.getSender());
+                headerAccessor.getSessionAttributes().put("username", sender);
             }
 
-            webSocketService.notifyUserConnection(message.getSender(), true);
+            webSocketService.notifyUserConnection(sender, true);
 
         } catch (Exception e) {
             log.error("Error adding user: {}", e.getMessage(), e);
@@ -325,14 +376,19 @@ public class WebSocketController {
      */
     @MessageMapping("/chat.removeUser")
     public void removeUser(@Payload WebSocketMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String sender = authenticatedUser(headerAccessor, message);
+        if (sender == null) {
+            return;
+        }
         try {
-            log.info("User disconnecting: {}", message.getSender());
+            message.setSender(sender);
+            log.info("User disconnecting: {}", sender);
 
             if (headerAccessor.getSessionAttributes() != null) {
                 headerAccessor.getSessionAttributes().remove("username");
             }
 
-            webSocketService.notifyUserConnection(message.getSender(), false);
+            webSocketService.notifyUserConnection(sender, false);
 
         } catch (Exception e) {
             log.error("Error removing user: {}", e.getMessage(), e);

@@ -3,6 +3,10 @@ package ir.iau.library.config;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import ir.iau.library.security.StompAuthChannelInterceptor;
+import org.springframework.messaging.simp.config.ChannelRegistration;
+import ir.iau.library.security.StompAuthChannelInterceptor;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -22,8 +26,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     private final TaskScheduler heartbeatScheduler;
 
-    public WebSocketConfig(@Qualifier("websocketHeartbeatScheduler") TaskScheduler heartbeatScheduler) {
+    /**
+     * Authenticates STOMP CONNECT frames and enforces sender/destination identity. Injected
+     * so the WebSocket layer shares the same JWT verification as the REST API.
+     */
+    private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
+
+    public WebSocketConfig(
+            @Qualifier("websocketHeartbeatScheduler") TaskScheduler heartbeatScheduler,
+            StompAuthChannelInterceptor stompAuthChannelInterceptor) {
         this.heartbeatScheduler = heartbeatScheduler;
+        this.stompAuthChannelInterceptor = stompAuthChannelInterceptor;
     }
 
     /**
@@ -108,5 +121,27 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
         registration.setSendTimeLimit((int) disconnectDelay);
+    }
+
+    /**
+     * Register the STOMP authentication interceptor on the inbound channel so every
+     * CONNECT/SUBSCRIBE/SEND frame is authenticated and identity-checked before it reaches
+     * a controller. This is what makes the WebSocket layer stop trusting client-supplied
+     * usernames.
+     */
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(stompAuthChannelInterceptor);
+    }
+
+    /**
+     * Register the STOMP authentication interceptor on the inbound channel so every
+     * CONNECT/SUBSCRIBE/SEND frame is authenticated and identity-checked before it reaches
+     * a controller. This is what makes the WebSocket layer stop trusting client-supplied
+     * usernames.
+     */
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(stompAuthChannelInterceptor);
     }
 }

@@ -133,6 +133,20 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!-- STOMP/WebSocket message security: ChannelInterceptor used to authenticate
+             the STOMP CONNECT frame and authorize SUBSCRIBE/SEND destinations. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-messaging</artifactId>
+        </dependency>
+
+        <!-- STOMP/WebSocket message security: ChannelInterceptor + messaging authorization.
+             Authenticates the STOMP CONNECT frame and authorizes SUBSCRIBE/SEND destinations. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-messaging</artifactId>
+        </dependency>
+
         <!-- JWT issuance/validation (the mechanism documented via JWT_SECRET). -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

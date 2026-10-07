@@ -118,7 +118,17 @@ public class FileService {
         FileAttachment fileAttachment = fileAttachmentRepository.findById(fileId)
                 .orElseThrow(() -> new Exception("File not found"));
 
-        Path filePath = Paths.get(fileAttachment.getFilePath());
+        // Defense-in-depth boundary check: even though the path is server-generated, resolve it
+        // against the configured upload root and refuse anything that escapes it (guards against
+        // a tampered DB row or a future bug). Uses the canonical path so symlinks/`..` cannot
+        // walk outside the intended storage directory.
+        Path uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path filePath = Paths.get(fileAttachment.getFilePath()).toAbsolutePath().normalize();
+        if (!filePath.startsWith(uploadRoot)) {
+            log.error("Refusing to serve file {} outside the upload root", fileId);
+            throw new Exception("File not found");
+        }
+
         Resource resource = new UrlResource(filePath.toUri());
 
         if (resource.exists() && resource.isReadable()) {
@@ -253,23 +263,50 @@ public class FileService {
     /**
      * تولید نام فایل یکتا
      */
+    /**
+     * Builds a safe, unique storage name from a client-supplied original filename.
+     *
+     * <p>Hardened against path traversal and header injection:
+     * <ul>
+     *   <li>any directory component is discarded ({@code Paths.get(name).getFileName()}),</li>
+     *   <li>the base name is reduced to a strict {@code [A-Za-z0-9_-]} charset,</li>
+     *   <li>dot-runs are collapsed and leading dots removed, so no {@code ..} survives,</li>
+     *   <li>the extension is taken from the sanitized name and reduced to a short,
+     *       safe {@code [a-z0-9]} value, so no quotes/CR/LF reach the Content-Disposition header,</li>
+     *   <li>an empty result falls back to {@code "file"}.</li>
+     * </ul>
+     * The timestamp + random suffix guarantee uniqueness regardless of the input.
+     */
     private String generateUniqueFileName(String originalFilename) {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         String uuid = UUID.randomUUID().toString().substring(0, 8);
 
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        // Discard any path component the client may have supplied (../, C:\, etc.).
+        String bare = "file";
+        if (originalFilename != null && !originalFilename.isBlank()) {
+            String leaf = Paths.get(originalFilename).getFileName().toString();
+            if (!leaf.isBlank()) {
+                bare = leaf;
+            }
         }
 
-        String baseName = originalFilename != null ?
-                originalFilename.replaceAll("[^a-zA-Z0-9._-]", "_") : "file";
-
-        if (baseName.contains(".")) {
-            baseName = baseName.substring(0, baseName.lastIndexOf("."));
+        // Split off the extension from the sanitized leaf, then sanitize each part.
+        String rawExtension = "";
+        int dot = bare.lastIndexOf('.');
+        if (dot >= 0 && dot < bare.length() - 1) {
+            rawExtension = bare.substring(dot + 1);
+            bare = bare.substring(0, dot);
         }
 
-        return baseName + "_" + timestamp + "_" + uuid + extension;
+        String baseName = bare.replaceAll("[^A-Za-z0-9_-]", "_").replaceAll("_+", "_");
+        if (baseName.isBlank()) {
+            baseName = "file";
+        }
+
+        String extension = rawExtension.replaceAll("[^A-Za-z0-9]", "").toLowerCase();
+        String suffix = extension.isEmpty() ? "" : "." + extension;
+
+        return baseName + "_" + timestamp + "_" + uuid + suffix;
     }
 
     /**
