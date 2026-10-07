@@ -28,6 +28,9 @@ public class CorsConfig implements WebMvcConfigurer {
     @Value("${app.cors.allow-credentials:true}")
     private boolean allowCredentials;
 
+    @Value("${app.cors.max-age:3600}")
+    private long maxAge;
+
     // لیست fallback برای وقتی که properties خالی باشد
     private static final String[] DEFAULT_ALLOWED_ORIGINS = {
             "http://localhost:4200",            // توسعه محلی
@@ -47,7 +50,7 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowedMethods(allowedMethods)
                 .allowedHeaders(allowedHeaders)
                 .allowCredentials(allowCredentials)
-                .maxAge(3600);
+                .maxAge(maxAge);
     }
 
     @Bean
@@ -62,7 +65,7 @@ public class CorsConfig implements WebMvcConfigurer {
         configuration.setAllowedMethods(Arrays.asList(allowedMethods));
         configuration.setAllowedHeaders(Arrays.asList(allowedHeaders));
         configuration.setAllowCredentials(allowCredentials);
-        configuration.setMaxAge(3600L);
+        configuration.setMaxAge(maxAge);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
