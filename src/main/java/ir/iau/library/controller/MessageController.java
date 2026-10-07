@@ -4,7 +4,9 @@ import ir.iau.library.dto.ApiResponse;
 import ir.iau.library.dto.ConversationCriteria;
 import ir.iau.library.dto.MessageUpdateRequest;
 import ir.iau.library.dto.SearchCriteria;
+import ir.iau.library.dto.UpdateMessageRequest;
 import ir.iau.library.service.MessageService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -81,22 +83,20 @@ public class MessageController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse> updateMessage(@PathVariable Long id, @RequestBody String newMessage) {
-        try {
-            log.info("Updating message {} with new content", id);
+    public ResponseEntity<ApiResponse> updateMessage(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateMessageRequest body) {
+        // The raw-body binding previously stored the literal JSON as the message text and
+        // skipped validation entirely. Binding the typed record rejects a blank/oversized
+        // message with a 400 before it reaches the service.
+        log.info("Updating message {} with new content", id);
 
-            MessageUpdateRequest request = new MessageUpdateRequest();
-            request.setId(id);
-            request.setMessage(newMessage);
+        MessageUpdateRequest request = new MessageUpdateRequest();
+        request.setId(id);
+        request.setMessage(body.message());
 
-            ApiResponse response = messageService.updateMessage(request);
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            log.error("Error updating message: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("خطا در به‌روزرسانی پیام"));
-        }
+        ApiResponse response = messageService.updateMessage(request);
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")
