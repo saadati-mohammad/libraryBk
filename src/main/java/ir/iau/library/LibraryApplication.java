@@ -15,7 +15,11 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 public class LibraryApplication {
 
 	public static void main(String[] args) {
-        ir.iau.library.config.KeyPromptValidator.verify();
+		// Optional, machine-bound license gate. Disabled by default so the app starts in
+		// headless environments (Docker/CI/Liara). Enable with -Dapp.license.enabled=true.
+		boolean licenseEnabled = Boolean.parseBoolean(System.getProperty("app.license.enabled", "false"));
+		boolean licenseInteractive = Boolean.parseBoolean(System.getProperty("app.license.interactive", "false"));
+		ir.iau.library.config.KeyPromptValidator.verify(licenseEnabled, licenseInteractive);
 		SpringApplication.run(LibraryApplication.class, args);
 	}
 
