@@ -31,6 +31,10 @@ public class PersonService {
     }
 
     public Person createPerson(Person person, MultipartFile profilePicture) throws IOException {
+        // Server-controlled fields: a client-supplied id would make save() a merge that
+        // can overwrite an existing member (mass assignment).
+        person.setId(null);
+        person.setLoans(null);
         person.setActive(true);
         person.setMembershipDate(java.time.LocalDate.now());
 

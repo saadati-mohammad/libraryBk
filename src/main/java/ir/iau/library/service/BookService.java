@@ -27,6 +27,11 @@ public class BookService {
     }
 
     public Book createBook(Book book, MultipartFile bookCoverFile) throws IOException {
+        // Never trust a client-supplied identity on create: a set id turns save() into
+        // a merge that can overwrite an existing row (mass assignment). The id and the
+        // back-reference collection are always server-controlled.
+        book.setId(null);
+        book.setLoans(null);
         if (bookCoverFile != null && !bookCoverFile.isEmpty()) {
             book.setBookCoverFile(bookCoverFile.getBytes());
         }
