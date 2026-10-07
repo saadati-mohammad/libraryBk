@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -120,6 +121,20 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error("نام کاربری یا رمز عبور نادرست است"));
+    }
+
+    /**
+     * مسیرهای ناشناخته زیر /api/** در Spring Boot 3.5 به‌صورت NoResourceFoundException
+     * پرتاب می‌شوند (نه NoHandlerFoundException). بدون این mapper، یک درخواست به مسیر ناموجود
+     * به‌اشتباه ۵۰۰ بازمی‌گرداند و stack trace ثبت می‌کند؛ در حالی که پاسخ صحیح ۴۰۴ است.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handleNoResourceFound(NoResourceFoundException ex) {
+
+        log.warn("No resource found for: {}", ex.getResourcePath());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("صفحه یا سرویس مورد نظر یافت نشد"));
     }
 
     /**
