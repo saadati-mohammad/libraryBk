@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -218,5 +219,38 @@ class BookLoanServiceTest {
                 .isInstanceOf(EntityNotFoundException.class);
 
         verify(loanRepository, never()).save(any());
+    }
+
+    @Test
+    void markOverdueLoans_flipsPastDueOnLoanLoansToOverdue() {
+        BookLoan overdue = BookLoan.builder()
+                .id(9L)
+                .person(activePerson)
+                .book(book)
+                .loanDate(LocalDate.now().minusDays(20))
+                .dueDate(LocalDate.now().minusDays(6))
+                .status(LoanStatus.ON_LOAN)
+                .build();
+
+        when(loanRepository.findByStatusAndDueDateBefore(LoanStatus.ON_LOAN, LocalDate.now()))
+                .thenReturn(List.of(overdue));
+        when(loanRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        int updated = service.markOverdueLoans();
+
+        assertThat(updated).isEqualTo(1);
+        assertThat(overdue.getStatus()).isEqualTo(LoanStatus.OVERDUE);
+        verify(loanRepository).saveAll(any());
+    }
+
+    @Test
+    void markOverdueLoans_isNoOpWhenNoneArePastDue() {
+        when(loanRepository.findByStatusAndDueDateBefore(LoanStatus.ON_LOAN, LocalDate.now()))
+                .thenReturn(List.of());
+
+        int updated = service.markOverdueLoans();
+
+        assertThat(updated).isZero();
+        verify(loanRepository).saveAll(List.of());
     }
 }
