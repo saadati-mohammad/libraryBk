@@ -41,4 +41,10 @@ public class BookDto {
     private String columnNumber;
     private String positionNote;
     private Boolean active;
+    /**
+     * True when the book has a stored cover image. The bytes themselves are served by
+     * {@code GET /api/book/{id}/cover} so a list response never embeds image payloads; the flag
+     * lets the UI request the image only for the rows that actually have one.
+     */
+    private Boolean hasCover;
 }

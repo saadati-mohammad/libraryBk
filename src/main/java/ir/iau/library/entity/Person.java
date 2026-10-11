@@ -7,7 +7,10 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -58,15 +61,23 @@ public class Person {
     @Column(length = 2000)
     private String notes; // یادداشت های اضافی درباره عضو
 
-    // @Lob byte[] already maps to a large-object column; see the note on
-    // Book.bookCoverFile for why columnDefinition="LONGBLOB" was removed.
-    @Lob
+    // LONGVARBINARY maps to a large binary column; MySQL uses LONGBLOB to avoid its
+    // 255-byte TINYBLOB limit for profile pictures.
+    //
+    // @NotAudited: the audit table declared this column as VARBINARY(255), so any picture
+    // larger than 255 bytes made the Envers insert fail and every such upload returned
+    // HTTP 500. Binary payload has no audit value, so it is excluded from person_aud
+    // (V2__drop_blob_audit_columns.sql drops the stale column).
+    @NotAudited
+    @JdbcTypeCode(SqlTypes.LONGVARBINARY)
     @Basic(fetch = FetchType.LAZY)
     @Column(name = "profile_picture")
     private byte[] profilePicture; // عکس پروفایل
 
+    @Builder.Default
     private Boolean active = true; // فلگ برای غیرفعال سازی
 
+    @Builder.Default
     @OneToMany(mappedBy = "person", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<BookLoan> loans = new ArrayList<>();

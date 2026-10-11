@@ -2,6 +2,9 @@ package ir.iau.library.controller;
 
 import ir.iau.library.dto.LoginRequestDto;
 import ir.iau.library.dto.LoginResponseDto;
+import ir.iau.library.dto.MemberProfileDto;
+import ir.iau.library.dto.RegisterMemberRequestDto;
+import ir.iau.library.service.MemberRegistrationService;
 import ir.iau.library.security.JwtService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -25,10 +28,19 @@ public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final MemberRegistrationService memberRegistrationService;
 
-    public AuthController(AuthenticationManager authenticationManager, JwtService jwtService) {
+    public AuthController(AuthenticationManager authenticationManager, JwtService jwtService,
+                          MemberRegistrationService memberRegistrationService) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
+        this.memberRegistrationService = memberRegistrationService;
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/register")
+    public ResponseEntity<MemberProfileDto> register(@Valid @RequestBody RegisterMemberRequestDto request) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(memberRegistrationService.register(request));
     }
 
     @PostMapping("/login")

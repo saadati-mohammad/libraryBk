@@ -4,6 +4,7 @@ import ir.iau.library.entity.Book;
 import ir.iau.library.entity.Person;
 import ir.iau.library.entity.Reservation;
 import ir.iau.library.entity.ReservationStatus;
+import ir.iau.library.dto.CreateLoanRequestDto;
 import ir.iau.library.repository.BookRepository;
 import ir.iau.library.repository.PersonRepository;
 import ir.iau.library.repository.ReservationRepository;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -26,15 +28,25 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final PersonRepository personRepository;
     private final BookRepository bookRepository;
+    private final BookLoanService bookLoanService;
 
     public Reservation createReservation(Long personId, Long bookId, LocalDate expiryDate) {
         Person person = personRepository.findById(personId)
                 .orElseThrow(() -> new EntityNotFoundException("Person not found"));
-        Book book = bookRepository.findById(bookId)
+        // Serialize duplicate checks for the same title to close the create/create race.
+        Book book = bookRepository.findByIdForUpdate(bookId)
                 .orElseThrow(() -> new EntityNotFoundException("Book not found"));
 
         if (expiryDate != null && expiryDate.isBefore(LocalDate.now())) {
             throw new IllegalArgumentException("expiryDate cannot be in the past");
+        }
+
+        // A soft-deleted (inactive) person or book must not accept new reservations.
+        if (!Boolean.TRUE.equals(person.getActive())) {
+            throw new IllegalStateException("Person is not active and cannot reserve books.");
+        }
+        if (!Boolean.TRUE.equals(book.getActive())) {
+            throw new IllegalStateException("Book is not active and cannot be reserved.");
         }
 
         // Guard against duplicate active reservations for the same person/book.
@@ -55,7 +67,7 @@ public class ReservationService {
     }
 
     public Reservation fulfillReservation(Long reservationId) {
-        Reservation reservation = reservationRepository.findById(reservationId)
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
                 .orElseThrow(() -> new EntityNotFoundException("Reservation not found"));
 
         // Only an ACTIVE reservation can be fulfilled; reject double-fulfilment.
@@ -64,12 +76,43 @@ public class ReservationService {
                     + reservation.getStatus() + ").");
         }
 
+        // A fulfilled reservation is an actual checkout. The loan service applies member,
+        // book and copy-capacity rules in this same transaction; failures keep it active.
+        CreateLoanRequestDto loanRequest = new CreateLoanRequestDto();
+        loanRequest.setPersonId(reservation.getPerson().getId());
+        loanRequest.setBookId(reservation.getBook().getId());
+        bookLoanService.createLoan(loanRequest);
+
         reservation.setStatus(ReservationStatus.FULFILLED);
         return reservationRepository.save(reservation);
     }
 
+    public Reservation cancelReservation(Long reservationId) {
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
+                .orElseThrow(() -> new EntityNotFoundException("Reservation not found"));
+        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
+            throw new IllegalStateException("Only an active reservation can be cancelled.");
+        }
+        reservation.setStatus(ReservationStatus.CANCELLED);
+        return reservationRepository.save(reservation);
+    }
+
+    /** Member-scoped cancellation; ownership is checked after locking the row. */
+    public Reservation cancelReservationForPerson(Long reservationId, Long personId) {
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
+                .orElseThrow(() -> new EntityNotFoundException("Reservation not found"));
+        if (!reservation.getPerson().getId().equals(personId)) {
+            throw new AccessDeniedException("Reservation belongs to another member");
+        }
+        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
+            throw new IllegalStateException("Only an active reservation can be cancelled.");
+        }
+        reservation.setStatus(ReservationStatus.CANCELLED);
+        return reservationRepository.save(reservation);
+    }
+
     public List<Reservation> getActiveReservations() {
-        return reservationRepository.findByStatus(ReservationStatus.ACTIVE);
+        return reservationRepository.findByStatusOrderByReservationDateAscIdAsc(ReservationStatus.ACTIVE);
     }
 
     public List<Reservation> expireOverdueReservations() {

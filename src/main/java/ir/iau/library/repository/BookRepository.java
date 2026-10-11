@@ -5,11 +5,24 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
 
 import java.util.Optional;
 
 @Repository
 public interface BookRepository extends JpaRepository<Book, Long>, JpaSpecificationExecutor<Book> {
+
+    interface SubjectCount {
+        String getSubject();
+        Long getTitleCount();
+    }
+
+    @Query("SELECT b.subject AS subject, COUNT(b) AS titleCount FROM Book b " +
+            "WHERE b.active = true AND b.subject IS NOT NULL AND b.subject <> '' " +
+            "GROUP BY b.subject ORDER BY COUNT(b) DESC")
+    java.util.List<SubjectCount> countActiveSubjects();
 
     /**
      * Load a book with a pessimistic write lock.
@@ -21,4 +34,10 @@ public interface BookRepository extends JpaRepository<Book, Long>, JpaSpecificat
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT b FROM Book b WHERE b.id = :id")
     Optional<Book> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * Books that are not soft-deleted. Used by the dashboard: a deactivated book is gone
+     * from the catalogue's point of view, so it must not be counted.
+     */
+    long countByActiveTrue();
 }

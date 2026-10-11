@@ -6,8 +6,12 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.AssertTrue;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -40,10 +44,15 @@ public class Book {
     private String translator;
     private String publisher;
 
-    @NotBlank(message = "شابک ۱۰ الزامی است")
     private String isbn10;
 
     private String isbn13;
+
+    @JsonIgnore
+    @AssertTrue(message = "شابک ۱۰ یا ۱۳ رقمی الزامی است")
+    public boolean isIsbnIdentifierPresent() {
+        return (isbn10 != null && !isbn10.isBlank()) || (isbn13 != null && !isbn13.isBlank());
+    }
     @Column(length = 2000)
     private String description;
     private String deweyDecimal;
@@ -60,10 +69,16 @@ public class Book {
 
     private String language;
 
-    // @Lob byte[] already maps to a large-object column. The previous
-    // columnDefinition="LONGBLOB" conflicted with H2 (which reports the column as
-    // BLOB) and broke schema validation once ddl-auto=validate was enabled.
-    @Lob
+    // LONGVARBINARY maps to a large binary column; the MySQL migration uses LONGBLOB
+    // so configured uploads fit the database column instead of MySQL's 255-byte BLOB.
+    //
+    // @NotAudited: the audit table declared this column as VARBINARY(255), so any cover
+    // larger than 255 bytes made the Envers insert fail ("Value too long for column
+    // BOOK_COVER_FILE") and every such upload returned HTTP 500. The cover is binary
+    // payload with no audit value, so it is excluded from the *_aud tables entirely
+    // (V2__drop_blob_audit_columns.sql drops the stale columns).
+    @NotAudited
+    @JdbcTypeCode(SqlTypes.LONGVARBINARY)
     @Basic(fetch = FetchType.LAZY)
     @Column(name = "book_cover_file")
     private byte[] bookCoverFile;
@@ -81,6 +96,7 @@ public class Book {
     private String positionNote;   // توضیح اضافی درباره مکان یا شرایط خاص نگهداری
     private Boolean active; // soft delete flag
 
+    @Builder.Default
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<BookLoan> loans = new ArrayList<>();

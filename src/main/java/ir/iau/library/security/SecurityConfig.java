@@ -65,13 +65,19 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Allow CORS preflight through unauthenticated.
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Login is the one public API surface.
-                        .requestMatchers("/api/auth/login").permitAll()
+                        // Login and account creation are public authentication operations.
+                        .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+                        // The public catalog is read-only and exposes a restricted DTO.
+                        .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         // Operational / documentation endpoints.
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // WebSocket handshake (STOMP CONNECT carries its own identity).
                         .requestMatchers("/ws-chat/**").permitAll()
+                        .requestMatchers("/api/account/**").hasRole("MEMBER")
+                        .requestMatchers("/api/book/**", "/api/person/**", "/api/loan/**",
+                                "/api/reservations/**", "/api/dashboard/**", "/api/excel-import/**")
+                                .hasAnyRole("ADMIN", "LIBRARIAN")
                         // Everything else under the API requires a valid token.
                         .requestMatchers("/api/**").authenticated()
                         // Non-API routes (SPA shell, static assets, forwarded errors) are public.
