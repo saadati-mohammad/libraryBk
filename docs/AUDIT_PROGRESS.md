@@ -40,7 +40,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | T-017 | both | Evaluate performance, data integrity, observability, accessibility, Persian/RTL, imports, backups and deployment workflow | TODO | Implement measurable useful work; record justified exclusions |
 | T-018 | both | Run final builds, lint, unit/integration/E2E, scenario walkthrough and update docs/changelog/handoff | TODO | Capture exact evidence and limitations |
 | T-019 | both | Push each atomic task-group commit and open coordinated GitHub PRs | TODO | No force push; do not merge without authority and green CI |
-| T-020 | API | Add safe login and reset-request throttling | TODO | Bounded IP/account buckets; generic responses; proxy trust and tests |
+| T-020 | API | Add safe login and reset-request throttling | IN-PROGRESS | Configurable per-remote-address login/reset windows and 429/Retry-After; ignores spoofable forwarding headers. Unit + full `clean verify` green (156 tests). Remaining: shared distributed store and explicitly trusted-proxy resolution for multi-replica production |
 | T-021 | API | Revoke issued credentials after password reset | DONE | Additive auth_version migrations for H2/MySQL; JWT version checked against current account on each request; password reset increments it. `mvnw.cmd -B clean verify`: 154 tests passed, including stale member JWT rejection after reset (2026-10-11) |
 | T-022 | API | Fail closed for unowned attachment access and invalid message association | DONE | API now requires an active message for upload, denies missing/orphan ownership; `mvnw.cmd -B clean verify` passed 154 tests incl. orphan info/delete denial and upload-without-message rejection (2026-10-11) |
 | T-023 | API | Verify self-registered email before account activation | TODO | Expiring single-use flow, resend controls, configurable mail delivery |
@@ -78,6 +78,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 - Production MySQL, SMTP, HTTPS camera access, mobile LAN pairing and real HID devices may require external services/devices unavailable in this environment.
 - Competitor feature depth and regional product details require current sourced research; marketing pages alone may not establish actual behavior.
 - Opening PRs is possible after all changes are committed/pushed; merging is explicitly not assumed.
+- Auth throttling is currently in-process and keys off servlet `remoteAddr`; behind a reverse proxy, configure trusted client-IP resolution before treating per-client limits as effective across production traffic. Multiple replicas need shared storage.
 
 ## Next action
 
