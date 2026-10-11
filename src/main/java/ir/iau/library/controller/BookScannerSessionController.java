@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.security.Principal;
 
 /** Staff-authenticated desktop control for short-lived companion scanner sessions. */
 @RestController
@@ -23,14 +24,19 @@ public class BookScannerSessionController {
     public BookScannerSessionController(PhoneScannerSessionService sessions) { this.sessions = sessions; }
 
     @PostMapping
-    public ScannerSessionDto create() { return sessions.create(); }
+    public ScannerSessionDto create(Principal principal) {
+        return sessions.create(ir.iau.library.security.AccessControl.requireUsername(principal));
+    }
 
     @GetMapping("/{id}/scans")
-    public List<ScannedBarcodeDto> poll(@PathVariable String id,
+    public List<ScannedBarcodeDto> poll(Principal principal, @PathVariable String id,
                                        @RequestParam(defaultValue = "0") long afterSequence) {
-        return sessions.poll(id, Math.max(0, afterSequence));
+        return sessions.poll(id, Math.max(0, afterSequence),
+                ir.iau.library.security.AccessControl.requireUsername(principal));
     }
 
     @DeleteMapping("/{id}")
-    public void close(@PathVariable String id) { sessions.close(id); }
+    public void close(Principal principal, @PathVariable String id) {
+        sessions.close(id, ir.iau.library.security.AccessControl.requireUsername(principal));
+    }
 }

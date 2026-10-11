@@ -151,3 +151,20 @@ The current application is a working small-library MVP: guests can discover titl
 ## Scope boundary
 
 “Best-in-class” is not a single achievable binary state. This report separates hard correctness/security issues from large product capabilities. Phase 2 will compare competitors and value/effort; Phase 3 will map accepted stories; phases 4–6 will ship and verify a coherent, backward-compatible subset. Hardware protocols, national metadata subscriptions, real SMS, and production security properties require provider/device/deployment access and will be stated explicitly if not verifiable here.
+
+## Security re-audit addendum (2026-10-11)
+
+### AUD-019 — Authenticated staff could poll or close another staff member's phone-scanner session (High, fixed)
+
+- **Evidence:** scanner sessions used random IDs and pairing secrets, but the desktop poll and close endpoints checked only the broad staff role; the session itself did not record its creator.
+- **Impact:** a staff user who obtained another session ID could read pending scans or terminate the scan flow. Random IDs reduce discoverability but do not replace ownership enforcement.
+- **Fix:** scanner sessions created through the API now bind to the authenticated staff username; poll and close require the same owner. Cross-staff access returns 403.
+- **Verification:** `InputDeviceIntegrationTest.scannerSessionCanOnlyBePolledOrClosedByItsCreatingStaffAccount`; full `mvnw.cmd -B clean verify` passed 166 H2 tests, zero failures/errors.
+- **Backlog:** T-010/T-014 remains in progress pending broader endpoint audit.
+
+### AUD-020 — Global file storage statistics were available to any authenticated role (Medium, fixed)
+
+- **Evidence:** `/api/v1/files/stats` fell through to the generic authenticated API rule despite exposing global storage telemetry.
+- **Fix:** endpoint now requires ADMIN or LIBRARIAN.
+- **Verification:** a registered MEMBER login receives 403; included in the same 166-test full H2 verification.
+- **Backlog:** T-014 remains in progress pending full authorization matrix review.

@@ -140,11 +140,44 @@ class InputDeviceIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void scannerSessionCanOnlyBePolledOrClosedByItsCreatingStaffAccount() throws Exception {
+        String owner = "scanner-owner-" + System.nanoTime();
+        String other = "scanner-other-" + System.nanoTime();
+        createLibrarian(owner);
+        createLibrarian(other);
+        String ownerToken = jwtService.generateToken(owner, "LIBRARIAN");
+        String otherToken = jwtService.generateToken(other, "LIBRARIAN");
+        var session = scannerSessions.create(owner);
+
+        mvc.perform(get("/api/book/scanner-sessions/" + session.sessionId() + "/scans")
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/book/scanner-sessions/" + session.sessionId() + "/scans")
+                        .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/book/scanner-sessions/" + session.sessionId())
+                        .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/book/scanner-sessions/" + session.sessionId())
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk());
+    }
+
     private String login(String username, String password) throws Exception {
         MvcResult result = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(Map.of("username", username, "password", password))))
                 .andExpect(status().isOk()).andReturn();
         return mapper.readTree(result.getResponse().getContentAsString()).path("token").asText();
+    }
+
+    private void createLibrarian(String username) {
+        StaffAccount librarian = new StaffAccount();
+        librarian.setUsername(username);
+        librarian.setDisplayName("Scanner session test librarian");
+        librarian.setPasswordHash(passwordEncoder.encode("long-test-password-123"));
+        librarian.setRole(StaffRole.LIBRARIAN);
+        staffAccounts.save(librarian);
     }
 
     private String sha256(String token) throws Exception {

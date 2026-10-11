@@ -29,13 +29,17 @@ public class PhoneScannerSessionService {
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
 
     public ScannerSessionDto create() {
+        return create(null);
+    }
+
+    public ScannerSessionDto create(String ownerUsername) {
         purgeExpired();
         byte[] secret = new byte[32];
         random.nextBytes(secret);
         String id = UUID.randomUUID().toString();
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
         Instant expiresAt = Instant.now().plus(SESSION_LIFETIME);
-        sessions.put(id, new Session(token, expiresAt));
+        sessions.put(id, new Session(token, expiresAt, ownerUsername));
         return new ScannerSessionDto(id, token, expiresAt);
     }
 
@@ -74,7 +78,12 @@ public class PhoneScannerSessionService {
     }
 
     public List<ScannedBarcodeDto> poll(String id, long afterSequence) {
+        return poll(id, afterSequence, null);
+    }
+
+    public List<ScannedBarcodeDto> poll(String id, long afterSequence, String ownerUsername) {
         Session session = requireSession(id);
+        requireOwner(session, ownerUsername);
         synchronized (session) {
             List<ScannedBarcodeDto> scans = new ArrayList<>();
             while (!session.pending.isEmpty()) {
@@ -91,6 +100,18 @@ public class PhoneScannerSessionService {
 
     public void close(String id) {
         sessions.remove(id);
+    }
+
+    public void close(String id, String ownerUsername) {
+        Session session = requireSession(id);
+        requireOwner(session, ownerUsername);
+        sessions.remove(id, session);
+    }
+
+    private void requireOwner(Session session, String ownerUsername) {
+        if (session.ownerUsername != null && !session.ownerUsername.equals(ownerUsername)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Scanner session belongs to another staff account");
+        }
     }
 
     private Session requireSession(String id) {
@@ -115,15 +136,17 @@ public class PhoneScannerSessionService {
     private static final class Session {
         private final String token;
         private final Instant expiresAt;
+        private final String ownerUsername;
         private final ArrayDeque<ScannedBarcodeDto> pending = new ArrayDeque<>();
         private long sequence;
         private String lastBarcode;
         private long lastScanMillis;
         private Long deviceId;
 
-        private Session(String token, Instant expiresAt) {
+        private Session(String token, Instant expiresAt, String ownerUsername) {
             this.token = token;
             this.expiresAt = expiresAt;
+            this.ownerUsername = ownerUsername;
         }
     }
 }
