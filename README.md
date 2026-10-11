@@ -59,7 +59,9 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 | `FLYWAY_ENABLED` | Run migrations on startup | `true` |
 | `JWT_SECRET` | JWT signing secret (≥32 bytes; required in production) | empty |
 | `JWT_EXPIRATION` | Token lifetime in seconds | `86400` |
-| `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` | Operator login for the API (required in production) | `admin` / empty |
+| `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` / `APP_ADMIN_EMAIL` | Initial administrator username, password and recovery email | `admin` / empty / empty |
+| `PASSWORD_RESET_ENABLED` / `PUBLIC_APP_URL` | Enable email recovery and set the public UI origin used in reset links | `true` / empty |
+| `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | SMTP delivery for account recovery | empty / `587` / empty |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | `http://localhost:4200,...` |
 | `WS_ALLOWED_ORIGINS` | WebSocket allowed origins | `http://localhost:4200,...` |
 | `UPLOAD_DIR` | Attachment storage directory | `${user.home}/chat-uploads` |
@@ -73,8 +75,8 @@ Profiles:
 - `application-production.properties` — persistent MySQL required, H2 console off, quiet logging, and explicit CORS/JWT/admin secrets required.
 
 > **Migrations:** Flyway owns the schema. Development and tests use
-> `src/main/resources/db/migration/h2` (V1–V4); production selects
-> `src/main/resources/db/migration/mysql` (V1–V3). The provider-specific baselines
+> `src/main/resources/db/migration/h2` (V1–V6); production selects
+> `src/main/resources/db/migration/mysql` (V1–V5). The provider-specific baselines
 > create the initial schema; later migrations remove stale binary audit columns, widen
 > file columns, and create member accounts. Hibernate runs with
 > `spring.jpa.hibernate.ddl-auto=validate`, so it only checks that the entities match the
@@ -95,8 +97,9 @@ The suite also covers metadata provider mapping and the short-lived phone scanne
 ## Authentication
 
 The API is **default-deny**. Every `/api/**` endpoint requires a bearer token obtained from
-`POST /api/auth/login`; only `/api/auth/login`, the Swagger UI, and static resources are
-public. The WebSocket/STOMP broker authenticates the CONNECT frame with the same token —
+`POST /api/auth/login`; login, registration (when enabled), password recovery, the Swagger
+UI, and static resources are public. Password reset requests are generic unless the configured
+SMTP service is unavailable. The WebSocket/STOMP broker authenticates the CONNECT frame with the same token —
 there is no client-supplied identity.
 
 Chat and attachment endpoints are additionally **scoped to the authenticated principal**: the
@@ -117,9 +120,27 @@ curl -s "http://localhost:8079/api/book?page=0&size=1" -H "Authorization: Bearer
 curl -s http://localhost:8079/api/dashboard/summary -H "Authorization: Bearer <token>"
 ```
 
-Credentials are supplied via `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD`, BCrypt-hashed in
-memory at startup and never persisted. In the `production` profile these (and `JWT_SECRET`)
-have **no default** — the application refuses to start if they are unset.
+On an empty staff-account table, `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` seed the first
+administrator once; only the BCrypt password hash is stored. Subsequent credential and role
+changes are managed in the database. Staff accounts need a unique recovery email. In the `production` profile these initial credentials
+(and `JWT_SECRET`) have **no default** — the application refuses to start without them.
+
+### Password recovery
+
+`POST /api/auth/forgot-password` accepts `{ "email": "..." }` and returns the same generic
+response whether or not an account exists. If that email belongs to exactly one account, a
+20-minute, single-use reset link is emailed. `POST /api/auth/reset-password` accepts
+`{ "token": "...", "password": "..." }`; new passwords must be at least 12 characters.
+The new password is BCrypt-hashed. Only a SHA-256 hash of the random reset token is stored;
+the raw token exists only in the email link. Members use their registered email. Set
+`APP_ADMIN_EMAIL` for the initial administrator; staff emails can later be managed in the
+frontend's **حساب‌های کارکنان** page.
+
+For a deployment, set `PASSWORD_RESET_ENABLED=true`, `PUBLIC_APP_URL` to the HTTPS frontend
+origin, and `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, and `MAIL_FROM` to the
+SMTP provider's settings. If mail delivery is not configured or fails, the service issues no
+usable token and returns a service-unavailable response. Keep SMTP authentication and
+STARTTLS enabled in production.
 
 ## Book metadata and phone scanner APIs
 
