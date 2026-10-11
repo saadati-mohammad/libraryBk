@@ -5,6 +5,7 @@ import ir.iau.library.service.BookMetadataService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
@@ -18,4 +19,7 @@ public class BookMetadataController {
 
     @GetMapping("/isbn/{isbn}")
     public List<BookMetadataDto> byIsbn(@PathVariable String isbn) { return service.lookup(isbn); }
+
+    @GetMapping("/search")
+    public List<BookMetadataDto> search(@RequestParam("q") String query) { return service.search(query); }
 }
