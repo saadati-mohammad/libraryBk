@@ -1,6 +1,6 @@
 {
   "app": "lms-iau",
-  "port": 8080,
+  "port": 8079,
   "build": {
     "location": "germany"
   }
