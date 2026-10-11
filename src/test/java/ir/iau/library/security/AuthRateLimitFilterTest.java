@@ -61,6 +61,22 @@ class AuthRateLimitFilterTest {
         assertThat(blockedResponse.getHeader("Retry-After")).isNotBlank();
     }
 
+    @Test
+    void throttlesPhoneScanSubmissionAttemptsBeforeSessionAndDeviceLookups() throws Exception {
+        var filter = new AuthRateLimitFilter(new ObjectMapper(), 10, Duration.ofHours(1), 10, Duration.ofHours(1), 1, Duration.ofMinutes(1));
+        AtomicInteger passed = new AtomicInteger();
+        FilterChain chain = (request, response) -> passed.incrementAndGet();
+        String path = "/api/phone-scanner/sessions/3b241101-e2bb-4255-8caf-4136c566a962/scans";
+
+        filter.doFilter(request(path), new MockHttpServletResponse(), chain);
+        var blockedResponse = new MockHttpServletResponse();
+        filter.doFilter(request(path), blockedResponse, chain);
+
+        assertThat(passed).hasValue(1);
+        assertThat(blockedResponse.getStatus()).isEqualTo(429);
+        assertThat(blockedResponse.getHeader("Retry-After")).isNotBlank();
+    }
+
     private MockHttpServletRequest request(String path) {
         var request = new MockHttpServletRequest("POST", path);
         request.setRemoteAddr("192.0.2.10");

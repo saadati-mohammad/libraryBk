@@ -49,7 +49,8 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         if (!"POST".equalsIgnoreCase(request.getMethod())) return true;
         String path = request.getRequestURI();
         return !"/api/auth/login".equals(path) && !"/api/auth/forgot-password".equals(path)
-                && !path.matches("/api/device-inputs/\\d+/heartbeat");
+                && !path.matches("/api/device-inputs/\\d+/heartbeat")
+                && !path.matches("/api/phone-scanner/sessions/[0-9a-fA-F-]{36}/scans");
     }
 
     @Override
@@ -57,7 +58,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String path = request.getRequestURI();
         boolean login = "/api/auth/login".equals(path);
-        boolean device = path.startsWith("/api/device-inputs/");
+        boolean device = path.startsWith("/api/device-inputs/") || path.startsWith("/api/phone-scanner/sessions/");
         Duration window = login ? loginWindow : device ? deviceWindow : resetWindow;
         int limit = login ? loginLimit : device ? deviceLimit : resetLimit;
         String key = path + "|" + request.getRemoteAddr();
