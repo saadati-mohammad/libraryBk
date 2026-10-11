@@ -37,4 +37,18 @@ class PhoneScannerSessionServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("410 GONE");
     }
+
+    @Test
+    void bindsRegisteredPhoneSessionToFirstAuthenticatedDevice() {
+        PhoneScannerSessionService service = new PhoneScannerSessionService();
+        var session = service.create();
+
+        service.submit(session.sessionId(), session.pairingToken(), "9780306406157", 42L);
+        assertThatThrownBy(() -> service.submit(session.sessionId(), session.pairingToken(), "9780306406157", 43L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        assertThatThrownBy(() -> service.submit(session.sessionId(), session.pairingToken(), "9780306406157", null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+    }
 }
