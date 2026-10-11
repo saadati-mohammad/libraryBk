@@ -10,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import ir.iau.library.security.JwtService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -33,6 +34,9 @@ class SecurityIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JwtService jwtService;
 
     @Test
     void unauthenticatedApiRequestIsRejected() throws Exception {
@@ -92,5 +96,22 @@ class SecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"\",\"password\":\"\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void memberCannotReadGlobalFileStorageStatistics() throws Exception {
+        String email = "security-member-" + Math.abs(System.nanoTime()) + "@example.test";
+        String nationalId = String.format("%010d", Math.abs(System.nanoTime() % 1_000_000_000L));
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"firstName\":\"Security\",\"lastName\":\"Member\",\"email\":\""
+                                + email + "\",\"nationalId\":\"" + nationalId
+                                + "\",\"password\":\"long-test-password-123\"}"))
+                .andExpect(status().isCreated());
+        MvcResult login = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + email + "\",\"password\":\"long-test-password-123\"}"))
+                .andExpect(status().isOk()).andReturn();
+        String token = objectMapper.readTree(login.getResponse().getContentAsString()).path("token").asText();
+        mockMvc.perform(get("/api/v1/files/stats").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
     }
 }

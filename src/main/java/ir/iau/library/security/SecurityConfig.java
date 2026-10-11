@@ -95,6 +95,8 @@ public class SecurityConfig {
                         .requestMatchers("/ws-chat/**").permitAll()
                         .requestMatchers("/api/account/**").hasRole("MEMBER")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Global storage statistics are operational data, not a member message resource.
+                        .requestMatchers("/api/v1/files/stats").hasAnyRole("ADMIN", "LIBRARIAN")
                         .requestMatchers("/api/book/**", "/api/person/**", "/api/loan/**",
                                 "/api/reservations/**", "/api/dashboard/**", "/api/excel-import/**")
                                 .hasAnyRole("ADMIN", "LIBRARIAN")
