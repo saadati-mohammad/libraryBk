@@ -11,13 +11,15 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 
 import java.security.Principal;
-import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -44,6 +46,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final Pattern USER_DESTINATION = Pattern.compile("^/topic/user/([^/]+)$");
 
     private final JwtService jwtService;
+    private final ObjectProvider<UserDetailsService> userDetailsServices;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -70,15 +73,16 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         try {
             Claims claims = jwtService.parse(token);
             String username = claims.getSubject();
-            String role = claims.get("role", String.class);
             if (username == null || username.isBlank()) {
                 throw new JwtAuthenticationException("Token has no subject");
             }
+            UserDetails account = userDetailsServices.getObject().loadUserByUsername(username);
+            if (!account.isEnabled()) throw new JwtAuthenticationException("Account is disabled");
             Authentication authentication = new UsernamePasswordAuthenticationToken(
-                    username, null, List.of(new SimpleGrantedAuthority("ROLE_" + (role == null ? "ADMIN" : role))));
+                    account.getUsername(), null, account.getAuthorities());
             accessor.setUser(authentication);
-            log.debug("Authenticated STOMP CONNECT for principal '{}'", username);
-        } catch (JwtException | IllegalArgumentException ex) {
+            log.debug("Authenticated STOMP CONNECT for principal '{}'", account.getUsername());
+        } catch (JwtException | IllegalArgumentException | UsernameNotFoundException ex) {
             // Do not log the token itself; it is a credential.
             throw new JwtAuthenticationException("Invalid or expired token on STOMP CONNECT");
         }
@@ -94,6 +98,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         if (principal == null) {
             throw new JwtAuthenticationException("Unauthenticated SEND is not allowed");
         }
+        verifyCurrentAccount(principal.getName());
         Object payload = message.getPayload();
         if (payload instanceof WebSocketMessage wsMessage) {
             String claimedSender = wsMessage.getSender();
@@ -116,6 +121,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         if (principal == null) {
             throw new JwtAuthenticationException("Unauthenticated SUBSCRIBE is not allowed");
         }
+        verifyCurrentAccount(principal.getName());
         String destination = accessor.getDestination();
         if (destination == null) {
             throw new JwtAuthenticationException("SUBSCRIBE without destination");
@@ -140,5 +146,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         }
         String token = header.substring("Bearer ".length()).trim();
         return token.isEmpty() ? null : token;
+    }
+
+    private void verifyCurrentAccount(String username) {
+        try {
+            UserDetails account = userDetailsServices.getObject().loadUserByUsername(username);
+            if (!account.isEnabled()) throw new JwtAuthenticationException("Account is disabled");
+        } catch (UsernameNotFoundException ex) {
+            throw new JwtAuthenticationException("Account no longer exists");
+        }
     }
 }

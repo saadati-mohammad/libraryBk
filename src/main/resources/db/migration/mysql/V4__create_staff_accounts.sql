@@ -1,0 +1,15 @@
+CREATE TABLE staff_account (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    username VARCHAR(80) NOT NULL,
+    display_name VARCHAR(160) NOT NULL,
+    email VARCHAR(254),
+    password_hash VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_staff_account_username UNIQUE (username),
+    CONSTRAINT uk_staff_account_email UNIQUE (email),
+    CONSTRAINT ck_staff_account_role CHECK (role IN ('ADMIN', 'LIBRARIAN'))
+);

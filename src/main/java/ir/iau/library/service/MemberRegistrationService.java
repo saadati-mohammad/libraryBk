@@ -6,6 +6,8 @@ import ir.iau.library.entity.MemberAccount;
 import ir.iau.library.entity.Person;
 import ir.iau.library.repository.MemberAccountRepository;
 import ir.iau.library.repository.PersonRepository;
+import ir.iau.library.repository.StaffAccountRepository;
+import ir.iau.library.security.AdminCredentials;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,6 +24,8 @@ import java.util.Locale;
 public class MemberRegistrationService {
     private final PersonRepository people;
     private final MemberAccountRepository accounts;
+    private final StaffAccountRepository staffAccounts;
+    private final AdminCredentials adminCredentials;
     private final PasswordEncoder passwordEncoder;
     @Value("${app.registration.enabled:true}")
     private boolean registrationEnabled;
@@ -35,6 +39,10 @@ public class MemberRegistrationService {
         String nationalId = request.nationalId().strip();
         if (people.existsByEmailIgnoreCase(email)) {
             throw new IllegalStateException("این ایمیل قبلاً ثبت شده است.");
+        }
+        if (staffAccounts.existsByUsernameIgnoreCase(email) || staffAccounts.existsByEmailIgnoreCase(email)
+                || adminCredentials.isBootstrapUsername(email)) {
+            throw new IllegalStateException("این نام کاربری قبلاً برای حساب کارکنان استفاده شده است.");
         }
         if (people.existsByNationalId(nationalId)) {
             throw new IllegalStateException("این کد ملی قبلاً ثبت شده است.");

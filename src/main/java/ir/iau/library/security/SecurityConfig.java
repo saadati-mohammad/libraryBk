@@ -69,7 +69,8 @@ public class SecurityConfig {
                         // It cannot access any other API resource through this public route.
                         .requestMatchers("/api/phone-scanner/**").permitAll()
                         // Login and account creation are public authentication operations.
-                        .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/register",
+                                "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         // The public catalog is read-only and exposes a restricted DTO.
                         .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         // Operational / documentation endpoints.
@@ -78,6 +79,7 @@ public class SecurityConfig {
                         // WebSocket handshake (STOMP CONNECT carries its own identity).
                         .requestMatchers("/ws-chat/**").permitAll()
                         .requestMatchers("/api/account/**").hasRole("MEMBER")
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/book/**", "/api/person/**", "/api/loan/**",
                                 "/api/reservations/**", "/api/dashboard/**", "/api/excel-import/**")
                                 .hasAnyRole("ADMIN", "LIBRARIAN")

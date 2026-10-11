@@ -10,6 +10,9 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -37,7 +40,10 @@ class StompAuthChannelInterceptorTest {
     @BeforeEach
     void setUp() {
         jwtService = new JwtService(SECRET, 3600);
-        interceptor = new StompAuthChannelInterceptor(jwtService);
+        DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
+        factory.registerSingleton("testUserDetailsService", (UserDetailsService) username ->
+                User.withUsername(username).password("test-hash").roles("ADMIN").build());
+        interceptor = new StompAuthChannelInterceptor(jwtService, factory.getBeanProvider(UserDetailsService.class));
         channel = new MessageChannel() {
             @Override public boolean send(Message<?> message) { return true; }
             @Override public boolean send(Message<?> message, long timeout) { return true; }

@@ -6,6 +6,9 @@ import ir.iau.library.entity.FileAttachment;
 import ir.iau.library.entity.Message;
 import ir.iau.library.repository.FileAttachmentRepository;
 import ir.iau.library.repository.MessageRepository;
+import ir.iau.library.repository.StaffAccountRepository;
+import ir.iau.library.entity.StaffAccount;
+import ir.iau.library.entity.StaffRole;
 import ir.iau.library.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +58,9 @@ class MessageAuthorizationTest {
     private FileAttachmentRepository fileAttachmentRepository;
 
     @Autowired
+    private StaffAccountRepository staffAccountRepository;
+
+    @Autowired
     private JwtService jwtService;
 
     private long messageId;
@@ -62,6 +68,18 @@ class MessageAuthorizationTest {
 
     @BeforeEach
     void seedConversationAndAttachment() {
+        // JWT subjects are resolved against the database on each request, so seed actual
+        // staff identities instead of relying on arbitrary signed subjects.
+        for (String username : new String[]{ALICE, BOB, CAROL}) {
+            if (staffAccountRepository.existsByUsernameIgnoreCase(username)) continue;
+            StaffAccount account = new StaffAccount();
+            account.setUsername(username);
+            account.setDisplayName(username);
+            account.setPasswordHash("unused-test-hash");
+            account.setRole(StaffRole.LIBRARIAN);
+            account.setActive(true);
+            staffAccountRepository.save(account);
+        }
         Message message = messageRepository.save(Message.builder()
                 .sender(ALICE)
                 .senderFarsiTitle("Alice")

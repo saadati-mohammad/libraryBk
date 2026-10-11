@@ -9,14 +9,16 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * Reads a {@code Authorization: Bearer <jwt>} header, verifies the token, and populates the
@@ -34,9 +36,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+    private final ObjectProvider<UserDetailsService> userDetailsServices;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, ObjectProvider<UserDetailsService> userDetailsServices) {
         this.jwtService = jwtService;
+        this.userDetailsServices = userDetailsServices;
     }
 
     @Override
@@ -52,16 +56,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 Claims claims = jwtService.parse(token);
                 String username = claims.getSubject();
-                String role = claims.get("role", String.class);
                 if (username != null) {
-                    var authorities = role == null
-                            ? List.<SimpleGrantedAuthority>of()
-                            : List.of(new SimpleGrantedAuthority("ROLE_" + role));
-                    var authentication = new UsernamePasswordAuthenticationToken(username, null, authorities);
+                    // Re-read the account on every request so deactivation and role changes
+                    // take effect immediately instead of waiting for an old JWT to expire.
+                    UserDetails account = userDetailsServices.getObject().loadUserByUsername(username);
+                    if (!account.isEnabled()) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+                    var authentication = new UsernamePasswordAuthenticationToken(
+                            account.getUsername(), null, account.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
-            } catch (JwtException | IllegalArgumentException ex) {
+            } catch (JwtException | IllegalArgumentException | UsernameNotFoundException ex) {
                 // Invalid/expired signature: leave the context unauthenticated. Do not log the
                 // token itself (it is a credential).
                 log.debug("Rejected bearer token: {}", ex.getMessage());
