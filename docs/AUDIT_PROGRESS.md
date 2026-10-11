@@ -78,6 +78,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 - Production MySQL, SMTP, HTTPS camera access, mobile LAN pairing and real HID devices may require external services/devices unavailable in this environment.
 - Competitor feature depth and regional product details require current sourced research; marketing pages alone may not establish actual behavior.
 - Opening PRs is possible after all changes are committed/pushed; merging is explicitly not assumed.
+- Auth throttling is currently in-process and keys off servlet `remoteAddr`; behind a reverse proxy, configure trusted client-IP resolution before treating per-client limits as effective across production traffic. Multiple replicas need shared storage.
 
 ## Next action
 
