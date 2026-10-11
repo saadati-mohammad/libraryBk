@@ -109,10 +109,12 @@ public class PasswordResetService {
         var staff = staffAccounts.findByUsernameIgnoreCase(reset.getUsername()).orElse(null);
         if (staff != null) {
             staff.setPasswordHash(passwordEncoder.encode(newPassword));
+            staff.setAuthVersion(staff.getAuthVersion() + 1);
         } else {
             var member = memberAccounts.findByUsernameIgnoreCase(reset.getUsername())
                     .orElseThrow(() -> new EntityNotFoundException("لینک بازیابی نامعتبر یا منقضی شده است"));
             member.setPasswordHash(passwordEncoder.encode(newPassword));
+            member.setAuthVersion(member.getAuthVersion() + 1);
         }
         reset.setUsedAt(now);
         tokens.deleteByUsernameIgnoreCaseAndUsedAtIsNullAndIdNot(reset.getUsername(), reset.getId());

@@ -30,6 +30,9 @@ public class StaffAccount {
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
 
+    @Column(name = "auth_version", nullable = false)
+    private long authVersion = 0;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private StaffRole role;

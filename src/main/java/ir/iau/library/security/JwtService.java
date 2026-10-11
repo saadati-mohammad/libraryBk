@@ -46,10 +46,16 @@ public class JwtService {
 
     /** Issue a signed token for an authenticated principal. */
     public String generateToken(String username, String role) {
+        return generateToken(username, role, 0);
+    }
+
+    /** Issue a token bound to the account's current credential generation. */
+    public String generateToken(String username, String role, long authVersion) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(username)
                 .claim("role", role)
+                .claim("ver", authVersion)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(expirationSeconds)))
                 .signWith(signingKey)

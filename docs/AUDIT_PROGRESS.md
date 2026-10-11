@@ -41,7 +41,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | T-018 | both | Run final builds, lint, unit/integration/E2E, scenario walkthrough and update docs/changelog/handoff | TODO | Capture exact evidence and limitations |
 | T-019 | both | Push each atomic task-group commit and open coordinated GitHub PRs | TODO | No force push; do not merge without authority and green CI |
 | T-020 | API | Add safe login and reset-request throttling | TODO | Bounded IP/account buckets; generic responses; proxy trust and tests |
-| T-021 | API | Revoke issued credentials after password reset | TODO | Password/session generation check and stale-token tests |
+| T-021 | API | Revoke issued credentials after password reset | DONE | Additive auth_version migrations for H2/MySQL; JWT version checked against current account on each request; password reset increments it. `mvnw.cmd -B clean verify`: 154 tests passed, including stale member JWT rejection after reset (2026-10-11) |
 | T-022 | API | Fail closed for unowned attachment access and invalid message association | DONE | API now requires an active message for upload, denies missing/orphan ownership; `mvnw.cmd -B clean verify` passed 154 tests incl. orphan info/delete denial and upload-without-message rejection (2026-10-11) |
 | T-023 | API | Verify self-registered email before account activation | TODO | Expiring single-use flow, resend controls, configurable mail delivery |
 | T-024 | API | Normalize and validate ISBN across every write path | TODO | Audit existing duplicates before additive uniqueness enforcement |
