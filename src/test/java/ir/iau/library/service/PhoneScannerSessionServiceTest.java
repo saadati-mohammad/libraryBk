@@ -51,4 +51,15 @@ class PhoneScannerSessionServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("403 FORBIDDEN");
     }
+
+    @Test
+    void boundsActiveSessionsPerStaffAccount() {
+        PhoneScannerSessionService service = new PhoneScannerSessionService();
+        for (int i = 0; i < 10; i++) service.create("busy-librarian");
+
+        assertThatThrownBy(() -> service.create("busy-librarian"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("429 TOO_MANY_REQUESTS");
+        assertThat(service.create("another-librarian")).isNotNull();
+    }
 }

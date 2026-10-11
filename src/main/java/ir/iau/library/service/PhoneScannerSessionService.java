@@ -24,6 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PhoneScannerSessionService {
     private static final Duration SESSION_LIFETIME = Duration.ofMinutes(10);
     private static final int MAX_PENDING_SCANS = 50;
+    private static final int MAX_ACTIVE_SESSIONS = 1_000;
+    private static final int MAX_SESSIONS_PER_STAFF = 10;
     private static final long DUPLICATE_WINDOW_MILLIS = 1_200;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
@@ -32,8 +34,14 @@ public class PhoneScannerSessionService {
         return create(null);
     }
 
-    public ScannerSessionDto create(String ownerUsername) {
+    public synchronized ScannerSessionDto create(String ownerUsername) {
         purgeExpired();
+        if (sessions.size() >= MAX_ACTIVE_SESSIONS
+                || ownerUsername != null && sessions.values().stream()
+                        .filter(session -> ownerUsername.equals(session.ownerUsername)).count() >= MAX_SESSIONS_PER_STAFF) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many active scanner sessions; close an existing session and try again");
+        }
         byte[] secret = new byte[32];
         random.nextBytes(secret);
         String id = UUID.randomUUID().toString();
