@@ -4,7 +4,7 @@
 
 ## Executive summary
 
-The current LibraryUI/libraryBk product is a focused single-library MVP: public catalog, title-level book CRUD, person records, loans/returns, reservations, ISBN metadata lookup, staff/member roles, password reset and a phone scan relay. It does not yet have individual copy/barcode records, policy-driven circulation, queue ordering, stocktake, staging-based imports, granular permissions/session management, persistent device registry, or a production notification/audit pipeline.
+At the comparison baseline, LibraryUI/libraryBk was a focused single-library MVP: public catalog, title-level book CRUD, person records, loans/returns, reservations, ISBN metadata lookup, staff/member roles, password reset and a phone scan relay. Since then, a first persistent device registry (types, device credentials, admin lifecycle UI, audit and health fields) has been implemented. Individual copy/barcode records, policy-driven circulation, queue ordering, stocktake, staging-based imports, granular permissions/session management, registered-phone QR pairing, per-form input policies, and a production notification/security-audit pipeline remain gaps.
 
 The strongest recurring pattern across both enterprise ILS and small-library tools is that **bibliographic title and physical item/copy are separate records**, and circulation acts on a copy barcode. Repeated operational patterns are staged imports, circulation policies, visible holds queues, history/audit/report exports, and phone/handheld scanning. The next backlog priority should therefore be data integrity and workflow recovery/security before ambitious integrations (RFID, multi-branch, MARC editing).
 

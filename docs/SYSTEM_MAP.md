@@ -71,6 +71,7 @@ erDiagram
   BOOK ||--o{ RESERVATION : requested
   MESSAGE o|--o{ MESSAGE : replies_to
   MESSAGE o|--o{ FILE_ATTACHMENT : attaches
+  INPUT_DEVICE ||--o{ INPUT_DEVICE_AUDIT_EVENT : produces
   STAFF_ACCOUNT {
     bigint id PK
     string username UK
@@ -141,9 +142,30 @@ erDiagram
     datetime expires_at
     datetime used_at
   }
+  INPUT_DEVICE {
+    bigint id PK
+    string name
+    string type_key
+    string owner_username
+    string station
+    text config_json
+    string token_hash
+    boolean enabled
+    datetime last_seen_at
+    datetime revoked_at
+    bigint version
+  }
+  INPUT_DEVICE_AUDIT_EVENT {
+    bigint id PK
+    bigint device_id FK
+    string actor_username
+    string action
+    text details_json
+    datetime occurred_at
+  }
 ```
 
-Books aggregate `copyCount` rather than tracking individually barcoded physical copies. `Person` and `Book` have active flags for deactivation/soft deletion; loans, reservations, messages, and file attachments have separate lifecycles. Envers audits selected legacy domain entities but excludes large binary images; account/security actions do not yet have a unified searchable audit log. No persisted branch, fine, inventory-check, per-device, session, or permission entity exists at baseline. H2 migrations V1–V6 and MySQL migrations V1–V5 need provider-parity review.
+Books aggregate `copyCount` rather than tracking individually barcoded physical copies. `Person` and `Book` have active flags for deactivation/soft deletion; loans, reservations, messages, and file attachments have separate lifecycles. Envers audits selected legacy domain entities but excludes large binary images; account/security actions do not yet have a unified searchable audit log. H2 V8/MySQL V7 add the per-device registry and device audit events, while branch, fine, inventory-check, centralized session and permission entities remain absent. Device migration ran against H2; MySQL migration still requires a live MySQL run.
 
 ## API inventory (controller-level)
 
@@ -155,6 +177,8 @@ Exact request/response schemas are in `/v3/api-docs` and Swagger UI. Security ma
 | `/api/public/**` | `PublicCatalogController` | public read-only books, details, covers and categories |
 | `/api/book/**` | `BookController`, `BookMetadataController`, `BookScannerSessionController` | staff book CRUD/deactivation, provider search, staff pairing sessions |
 | `/api/phone-scanner/sessions/**` | `PhoneScannerController` | pairing-token scan submit (public matcher, capability authorized) |
+| `/api/admin/input-devices/**` | `InputDeviceAdminController` | ADMIN-only source types, device CRUD/state/revoke/token rotation and audit |
+| `/api/device-inputs/{id}/heartbeat` | `InputDeviceHeartbeatController` | public endpoint with per-device bearer credential and per-IP/device rate limit |
 | `/api/person/**` | `PersonController` | staff member CRUD/deactivation and picture |
 | `/api/loan/**` | `BookLoanController` | issue/list/return loans |
 | `/api/reservations/**` | `ReservationController` | staff create/fulfill/cancel/list active reservations |
@@ -168,14 +192,14 @@ Exact request/response schemas are in `/v3/api-docs` and Swagger UI. Security ma
 
 ## Current role/permission matrix (source-verified)
 
-| Actor | Public catalog | Member self-service | Book/person/loan/reservation/dashboard/import | Staff accounts | Messages/files | Phone scan submit |
+| Actor | Public catalog | Member self-service | Book/person/loan/reservation/dashboard/import | Staff accounts / input devices | Messages/files | Phone scan submit |
 | --- | --- | --- | --- | --- | --- | --- |
 | Guest | Read | No | No | No | No | Only with session capability token |
 | MEMBER | Read | Own account only (`/api/account/**`) | No | No | Authenticated; message/file participant checks | Only with session capability token |
 | LIBRARIAN | Read | No | Yes (`ADMIN` or `LIBRARIAN`) | No | Authenticated; participant checks | Only with session capability token |
 | ADMIN | Read | No | Yes | Yes (`/api/admin/**`) | Authenticated; participant checks | Only with session capability token |
 
-The SPA guards improve navigation only; API `SecurityConfig` enforces roles. API security is stateless bearer JWT with BCrypt password hashes and no refresh/session registry. Public matchers include auth operations, GET `/api/public/**`, phone scanner capability endpoint, CORS preflight, docs/health and the STOMP handshake (CONNECT must authenticate). Other API paths require authentication. Staff role model is fixed to `ADMIN` and `LIBRARIAN`; member account is linked one-to-one to a person. Fine-grained permissions, branches/scopes, invitation/email verification, MFA, login throttling, session revocation/history, and unified audit center are not present at baseline.
+The SPA guards improve navigation only; API `SecurityConfig` enforces roles. API security is stateless bearer JWT with BCrypt password hashes and no refresh/session registry. Public matchers include auth operations, GET `/api/public/**`, phone scanner capability endpoint, device heartbeat (device bearer + per-IP/device throttle), CORS preflight, docs/health and the STOMP handshake (CONNECT must authenticate). Other API paths require authentication. Staff role model is fixed to `ADMIN` and `LIBRARIAN`; member account is linked one-to-one to a person. Fine-grained permissions, branches/scopes, invitation/email verification, MFA, shared/distributed throttling, session revocation/history and unified security audit center are not present.
 
 ## Existing automated verification inventory
 
@@ -200,7 +224,7 @@ The SPA guards improve navigation only; API `SecurityConfig` enforces roles. API
 ## Initial verified gaps to investigate (not final severity assessment)
 
 1. No per-copy barcode inventory: only aggregate book `copyCount`, so a return/stocktake cannot identify which physical copy is involved.
-2. Existing mobile scanner is a temporary in-memory relay, not a registered/revocable device framework; no owner/station/config/health/audit persistence.
+2. An additive per-device registry now supports extensible source types and device credentials/audit/health, but registered-phone QR pairing, form-level source policies, physical-device verification and distributed throttling are still open (T-010–T-013).
 3. Authentication uses browser `localStorage` bearer tokens and lacks refresh/revocation/session inventory; assess actual threat model before changing architecture.
 4. Static two-role staff authorization; there is no fine-grained permission editor or scoped branch model.
 5. Envers covers selected domain rows but does not provide a security/admin action audit center; large binary columns are intentionally unaudited.

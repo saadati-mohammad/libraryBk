@@ -77,6 +77,7 @@ The current application is a working small-library MVP: guests can discover titl
 - **Scenario/impact:** an operator cannot register/revoke/identify a desk scanner or choose a scanner for loan/return/stocktake. Server restart drops pairing and a lost phone cannot be individually revoked once the pairing link is exposed.
 - **Action:** implement API-first pluggable provider registry and registered phone credentials/pairing; add role-scoped management, form policy/fallback and migrations. Keep current short-lived relay compatible until UI migrates.
 - **Backlog:** T-010, T-011, T-012.
+- **Implementation status (2026-10-11):** additive H2 V8/MySQL V7 schema, provider registry, administrator API, hashed/rotatable device tokens, audit events, heartbeat throttling, and `/input-devices` management UI now exist and have H2/Playwright coverage. This closes baseline registration and administrator CRUD findings only; persistent phone QR pairing, form-level input policies, configured hardware and MySQL execution remain open.
 
 ### AUD-011 — Scanner UX lacks safe batch recovery and camera controls (Medium-high)
 
