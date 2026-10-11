@@ -216,6 +216,27 @@ class MessageAuthorizationTest {
     }
 
     @Test
+    void unattachedOrphanAttachmentIsDeniedToEveryOrdinaryUser() throws Exception {
+        FileAttachment orphan = fileAttachmentRepository.save(FileAttachment.builder()
+                .fileName("orphan.txt")
+                .originalFileName("orphan.txt")
+                .contentType("text/plain")
+                .fileSize(1L)
+                .filePath("/tmp/orphan-not-on-disk.txt")
+                .uploadStatus("COMPLETED")
+                .build());
+
+        assertDeniedEnvelope(mockMvc.perform(get("/api/v1/files/info/" + orphan.getId())
+                        .header("Authorization", "Bearer " + tokenFor(ALICE)))
+                .andExpect(status().isForbidden())
+                .andReturn());
+        assertDeniedEnvelope(mockMvc.perform(delete("/api/v1/files/delete/" + orphan.getId())
+                        .header("Authorization", "Bearer " + tokenFor(BOB)))
+                .andExpect(status().isForbidden())
+                .andReturn());
+    }
+
+    @Test
     void attachmentsRemainAvailableToTheConversationParticipants() throws Exception {
         mockMvc.perform(get("/api/v1/files/info/" + fileId)
                         .header("Authorization", "Bearer " + tokenFor(ALICE)))

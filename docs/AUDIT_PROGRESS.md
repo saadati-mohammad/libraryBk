@@ -42,7 +42,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | T-019 | both | Push each atomic task-group commit and open coordinated GitHub PRs | TODO | No force push; do not merge without authority and green CI |
 | T-020 | API | Add safe login and reset-request throttling | TODO | Bounded IP/account buckets; generic responses; proxy trust and tests |
 | T-021 | API | Revoke issued credentials after password reset | TODO | Password/session generation check and stale-token tests |
-| T-022 | API | Fail closed for unowned attachment access and invalid message association | TODO | Cross-principal and orphan attachment tests |
+| T-022 | API | Fail closed for unowned attachment access and invalid message association | DONE | API now requires an active message for upload, denies missing/orphan ownership; `mvnw.cmd -B clean verify` passed 154 tests incl. orphan info/delete denial and upload-without-message rejection (2026-10-11) |
 | T-023 | API | Verify self-registered email before account activation | TODO | Expiring single-use flow, resend controls, configurable mail delivery |
 | T-024 | API | Normalize and validate ISBN across every write path | TODO | Audit existing duplicates before additive uniqueness enforcement |
 | T-025 | both | Add backward-compatible physical copy inventory and circulation | TODO | Includes per-copy barcode, condition and migration path from aggregate counts |
