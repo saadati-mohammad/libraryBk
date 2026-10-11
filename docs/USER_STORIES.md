@@ -1,0 +1,47 @@
+# User stories and traceability (audited baseline)
+
+**Status:** Traceability inventory, not a declaration that all stories are implemented. `Current` means confirmed in source/tests at baseline. `Gap` points to work in `AUDIT_PROGRESS.md`. Role names are the current system roles: Guest, MEMBER, LIBRARIAN, ADMIN.
+
+| ID / actor | Story and acceptance / edge cases | Screen(s) | API / permission | Verification / status |
+|---|---|---|---|---|
+| US-G-01 Guest | Search/browse public books and categories; empty results and invalid pages recover clearly; only active/public-safe fields appear | `/`, `/catalog`, `/categories` | `GET /api/public/**`; public GET | Playwright catalog/search + controller tests; Current, Persian normalization gap T-034 |
+| US-G-02 Guest | Open a book detail/cover; missing or inactive item has a not-found path | `/books/:id` | public book/detail/cover GET | E2E book details + public catalog integration; Current |
+| US-G-03 Guest | Sign in with generic errors; unavailable/inactive accounts do not leak sensitive existence | `/login` | `POST /api/auth/login`; public; backend auth | UI/API auth tests; Current; throttling T-020 |
+| US-G-04 Guest | Register only when policy enables it; if enabled, prove mailbox before an account can use recovery/login | `/register` and future verify route | `POST /api/auth/register`; registration config | Existing register tests; ownership verification gap T-023 |
+| US-G-05 Guest/member | Request password reset without account enumeration; token expires, is single-use, and hash is replaced; existing tokens become invalid | `/forgot-password`, `/reset-password` | `POST /api/auth/forgot-password`, `/reset-password`; public token flow | API/UI reset tests; hash/token current; stale JWT revoke gap T-021 |
+| US-M-01 Member | View and edit own account/profile; cannot identify or mutate another member | `/account` | `/api/account/**`; authenticated MEMBER, identity derived server-side | `MemberAccountIntegrationTest`; Current |
+| US-M-02 Member | View current/past loans and due date; overdue/returned state is consistent; no staff-only fields | `/account` | own account loan endpoint | member account integration and E2E; Current; configurable rules T-026 |
+| US-M-03 Member | Reserve an eligible title, view/cancel own reservation, recover from no capacity or expiry | `/account` | account reservation endpoints, ownership enforced | member/account reservation tests; Current; FIFO policy gap T-026 |
+| US-M-04 Member | Use message/chat/file features only as a participant; orphan/invalid IDs cannot expose another user’s files | messages UI/future route (no primary nav route verified) | `/api/messages/**`, `/api/v1/files/**`; participant policy | `MessageAuthorizationTest`; attachment orphan gap T-022 |
+| US-L-01 Librarian | Search/filter/paginate catalog; create/edit/deactivate a title; preserve historical references | `/book` | `/api/book/**`; ADMIN or LIBRARIAN | book tests, E2E; Current; ISBN parity T-024 |
+| US-L-02 Librarian | Add a book by manual entry, HID scanner or phone camera; metadata is attributed and reviewed; no repeated scan silently commits uncertain metadata | `/book`, `/phone-scan` | `/api/book/metadata/**`, book scanner sessions, capability-protected `/api/phone-scanner/sessions/**` | scanner E2E; current scan path; batch review/recovery T-029, device registry T-010–T-013 |
+| US-L-03 Librarian | Import a workbook, preview duplicates/field errors and limits, correct rows, then apply idempotently or cancel | `/book`, `/person` import dialogs | `/api/excel-import/**`; staff | import integration test; preview/recovery gap T-027/T-028 |
+| US-L-04 Librarian | Create/edit/deactivate/reactivate a member and preserve loan history; invalid identifiers fail with actionable errors | `/person` | `/api/person/**`; ADMIN or LIBRARIAN | person integration + soft-delete tests; Current |
+| US-L-05 Librarian | Check out an available item to an active eligible member; concurrent requests cannot exceed available capacity; operator can correct wrong patron/item before commit | `/loan` | `/api/loan/**`; staff | H2 concurrent loan test; Current for aggregate capacity, physical copy/workflow gap T-025/T-026 |
+| US-L-06 Librarian | Return a selected active loan; duplicate/unknown return gives useful feedback and history is retained | `/loan` | `/api/loan/**` return/list | API and Playwright circulation; Current; per-copy return T-025 |
+| US-L-07 Librarian | Fulfill/cancel only an eligible reservation in fair queue order; explain blocked/no-copy and restore state if transaction fails | `/reservation`, `/account` | `/api/reservations/**` staff; own account cancellation | service/controller tests; Current basic rules, queue fairness T-026 |
+| US-L-08 Librarian | View operational dashboard; zero-data/loading/error states remain usable | `/dashboard` | `/api/dashboard/**`; staff | dashboard component tests + E2E; Current |
+| US-L-09 Librarian | A physical scanner is detected as keyboard input without a special driver; staff can manual fallback when scanner fails | `/book`; future loan/return/inventory forms | existing form input; authorized write API | keyboard-wedge Playwright book workflow; book-only integration; T-010–T-013 extend coverage |
+| US-A-01 Admin | Create/update/deactivate/reactivate staff accounts; prevent disabling/demoting the last active admin; audit actor and change | `/staff-accounts` | `/api/admin/staff-accounts/**`; ADMIN only | `StaffAccountIntegrationTest`; last-admin current, actor audit T-031/T-033 |
+| US-A-02 Admin | Grant the minimum required capabilities and preview effective access; API rejects every forbidden operation | future access center | backend policy on each route | current role enforcement tests; fine-grained control gap T-033 |
+| US-A-03 Admin | List/revoke one/all sessions after password reset, staff departure or device loss; stale token is denied | future security center | auth/session endpoints not yet implemented | gap T-021/T-033 |
+| US-A-04 Admin | Review searchable actor/time/action/source audit with redacted before/after data and policy-driven retention | future audit center | audit endpoints not yet implemented | Envers subset only; gap T-031/T-032 |
+| US-A-05 Admin | Manage devices/pair phone; inspect status/last-seen/capabilities, disable/revoke, choose permitted form input with fallback | future Devices & Input Sources | device APIs not yet implemented; API must enforce | gap T-009–T-013 |
+| US-A-06 Admin | Configure circulation periods, reservation eligibility, maximum active loans and holidays; default migration preserves current 14-day policy | future circulation policy UI | policy APIs not yet implemented | gap T-026/T-036 |
+| US-A-07 Admin | Export operational data and recover removed records only with permission; privacy-erasure rules supersede indefinite retention | future audit/recovery UI | endpoints not yet implemented | gap T-031/T-032/T-035 |
+| US-S-01 All roles | On camera permission/network failure, provide clear next step; queue scans visibly, deduplicate, allow review/remove/retry/undo; never lose a batch silently | book and phone scanner | pair/poll/submit endpoints | baseline camera and relay E2E; resilient review gaps T-029/T-030 |
+| US-S-02 All roles | Persian dates, RTL, keyboard navigation, contrast and zoom/projector layouts remain readable and accessible | all primary routes | n/a | axe/visual/responsive E2E baseline; continue final viewport audit T-018 |
+
+## Permission contract (verified baseline)
+
+- Guest: read public catalog and details only; reset/login/register public operations; phone scan submission requires possession of a short-lived capability token.
+- MEMBER: public catalog plus own `/api/account/**`; server determines identity from authentication, never a user-supplied member ID.
+- LIBRARIAN: shared book/person/loan/reservation/dashboard/import operations under backend staff role matcher; no staff-account administration.
+- ADMIN: librarian operations plus staff account operations under `/api/admin/**`.
+- All remaining API endpoints require authentication; UI route guards are not an authorization boundary. Message/file access also has participant checks but orphan file ownership is defective (T-022).
+
+## Current test map and gaps
+
+- UI: Vitest 28 files / 158 tests; Playwright Chromium desktop/mobile 73 pass, one expected viewport-conditional desktop skip. Flows cover catalog, login/member/staff, books/people, loans/reservations, date/calendar, password reset, barcode modes, accessibility and contrast. No complete UI flow exists for device management, import dry run, session administration, permission matrix, audit center or physical-copy inventory.
+- API: Maven clean verify 152 tests on H2/Flyway. Tests cover auth/reset, role enforcement, member ownership, soft delete, file path/participant authorization, imports, scanner relay, reservation, and aggregate concurrency. No production MySQL run, identity-session revoke, attachment-orphan security, policy engine, physical copy, row-level audit center, load/backup drill, or rate-limit proof exists.
+- Treat every `Gap` as an explicit implementation task. Scenarios dependent on email/SMS, real scanner hardware, RFID, multiple branches, third-party Iranian catalog licensing or production MySQL must have a runnable adapter test and deployment evidence before being marked complete.
