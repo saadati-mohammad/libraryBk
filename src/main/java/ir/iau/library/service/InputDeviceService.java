@@ -149,6 +149,20 @@ public class InputDeviceService {
         return new InputDeviceHeartbeatDto(saved.getId(), saved.isEnabled(), saved.getLastSeenAt());
     }
 
+    /** Validates a registered camera device without heartbeat throttling (continuous scans can arrive rapidly). */
+    @Transactional
+    public void authenticatePhoneScanner(long id, String bearerToken) {
+        InputDevice device = requireDevice(id);
+        if (!"PHONE_CAMERA".equals(device.getTypeKey()) || !device.isEnabled() || device.getRevokedAt() != null
+                || device.getTokenHash() == null || bearerToken == null
+                || !MessageDigest.isEqual(device.getTokenHash().getBytes(StandardCharsets.US_ASCII),
+                hash(bearerToken).getBytes(StandardCharsets.US_ASCII))) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Registered phone scanner credential is invalid or revoked");
+        }
+        device.setLastSeenAt(Instant.now());
+        devices.save(device);
+    }
+
     @Transactional(readOnly = true)
     public List<InputDeviceAuditEventDto> audit(long id) {
         requireDevice(id);

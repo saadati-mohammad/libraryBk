@@ -8,6 +8,7 @@ import ir.iau.library.entity.StaffRole;
 import ir.iau.library.repository.InputDeviceRepository;
 import ir.iau.library.repository.StaffAccountRepository;
 import ir.iau.library.security.JwtService;
+import ir.iau.library.service.PhoneScannerSessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +38,7 @@ class InputDeviceIntegrationTest {
     @Autowired StaffAccountRepository staffAccounts;
     @Autowired JwtService jwtService;
     @Autowired PasswordEncoder passwordEncoder;
+    @Autowired PhoneScannerSessionService scannerSessions;
 
     @Test
     void adminCanDiscoverSchemaProvisionTokenRotateDisableAndRevokeDevice() throws Exception {
@@ -110,6 +112,32 @@ class InputDeviceIntegrationTest {
         String librarianToken = jwtService.generateToken(username, "LIBRARIAN");
         mvc.perform(get("/api/admin/input-devices").header("Authorization", "Bearer " + librarianToken))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void registeredPhoneCanScanAndRevocationImmediatelyBlocksItsCredential() throws Exception {
+        String admin = login("admin", "admin");
+        String request = mapper.writeValueAsString(Map.of("name", "Desk phone", "typeKey", "PHONE_CAMERA",
+                "ownerUsername", "admin", "station", "desk", "config", Map.of("cameraFacing", "environment")));
+        JsonNode provisioned = mapper.readTree(mvc.perform(post("/api/admin/input-devices")
+                        .header("Authorization", "Bearer " + admin).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        long deviceId = provisioned.path("device").path("id").asLong();
+        String deviceToken = provisioned.path("token").asText();
+        var session = scannerSessions.create();
+        String scan = mapper.writeValueAsString(Map.of("pairingToken", session.pairingToken(),
+                "barcode", "9780306406157", "deviceId", deviceId, "deviceToken", deviceToken));
+
+        mvc.perform(post("/api/phone-scanner/sessions/" + session.sessionId() + "/scans")
+                        .contentType(MediaType.APPLICATION_JSON).content(scan))
+                .andExpect(status().isOk());
+        assertThat(devices.findById(deviceId).orElseThrow().getLastSeenAt()).isNotNull();
+
+        mvc.perform(delete("/api/admin/input-devices/" + deviceId).header("Authorization", "Bearer " + admin))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/phone-scanner/sessions/" + session.sessionId() + "/scans")
+                        .contentType(MediaType.APPLICATION_JSON).content(scan))
+                .andExpect(status().isUnauthorized());
     }
 
     private String login(String username, String password) throws Exception {

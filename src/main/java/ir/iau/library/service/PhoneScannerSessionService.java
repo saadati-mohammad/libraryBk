@@ -40,6 +40,10 @@ public class PhoneScannerSessionService {
     }
 
     public ScannedBarcodeDto submit(String id, String token, String rawBarcode) {
+        return submit(id, token, rawBarcode, null);
+    }
+
+    public ScannedBarcodeDto submit(String id, String token, String rawBarcode, Long deviceId) {
         Session session = requireSession(id);
         if (!constantTimeEquals(session.token, token)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid scanner pairing token");
@@ -49,6 +53,10 @@ public class PhoneScannerSessionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only valid ISBN-10 or ISBN-13 barcodes are accepted");
         }
         synchronized (session) {
+            if (session.deviceId != null && !session.deviceId.equals(deviceId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This scanner session is bound to another device");
+            }
+            if (deviceId != null && session.deviceId == null) session.deviceId = deviceId;
             long now = System.currentTimeMillis();
             if (barcode.equals(session.lastBarcode) && now - session.lastScanMillis < DUPLICATE_WINDOW_MILLIS) {
                 return new ScannedBarcodeDto(session.sequence, barcode, Instant.ofEpochMilli(session.lastScanMillis));
@@ -111,6 +119,7 @@ public class PhoneScannerSessionService {
         private long sequence;
         private String lastBarcode;
         private long lastScanMillis;
+        private Long deviceId;
 
         private Session(String token, Instant expiresAt) {
             this.token = token;
