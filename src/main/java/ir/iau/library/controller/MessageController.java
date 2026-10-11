@@ -41,13 +41,13 @@ public class MessageController {
         return response != null ? response.getData() : null;
     }
 
-    /** Caller must be the sender or the recipient. */
-    private void requireParticipant(Long id, String caller) {
+    /** Editing/deleting a conversation message is limited to its authenticated sender. */
+    private void requireSender(Long id, String caller) {
         MessageDto message = messageForAuthorization(id);
         if (message == null) {
             return;
         }
-        AccessControl.requireParticipant(caller, message.getSender(), message.getRecipient(), "message " + id);
+        AccessControl.requireSelf(caller, message.getSender(), "message " + id);
     }
 
     /** Only the recipient of a message may mark it read. */
@@ -141,7 +141,7 @@ public class MessageController {
         // skipped validation entirely. Binding the typed record rejects a blank/oversized
         // message with a 400 before it reaches the service.
         String caller = AccessControl.requireUsername(principal);
-        requireParticipant(id, caller);
+        requireSender(id, caller);
         log.info("Updating message {} with new content", id);
 
         MessageUpdateRequest request = new MessageUpdateRequest();
@@ -155,7 +155,7 @@ public class MessageController {
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse> deleteMessage(Principal principal, @PathVariable Long id) {
         String caller = AccessControl.requireUsername(principal);
-        requireParticipant(id, caller);
+        requireSender(id, caller);
 
         try {
             log.info("Deleting message {}", id);
