@@ -24,25 +24,32 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private final Duration loginWindow;
     private final int resetLimit;
     private final Duration resetWindow;
+    private final int deviceLimit;
+    private final Duration deviceWindow;
     private final ConcurrentHashMap<String, Window> windows = new ConcurrentHashMap<>();
 
     public AuthRateLimitFilter(ObjectMapper mapper,
             @Value("${app.security.rate-limit.login.limit:20}") int loginLimit,
             @Value("${app.security.rate-limit.login.window:PT15M}") Duration loginWindow,
             @Value("${app.security.rate-limit.reset.limit:5}") int resetLimit,
-            @Value("${app.security.rate-limit.reset.window:PT1H}") Duration resetWindow) {
+            @Value("${app.security.rate-limit.reset.window:PT1H}") Duration resetWindow,
+            @Value("${app.security.rate-limit.device.limit:60}") int deviceLimit,
+            @Value("${app.security.rate-limit.device.window:PT1M}") Duration deviceWindow) {
         this.mapper = mapper;
         this.loginLimit = Math.max(1, loginLimit);
         this.loginWindow = loginWindow.isNegative() || loginWindow.isZero() ? Duration.ofMinutes(15) : loginWindow;
         this.resetLimit = Math.max(1, resetLimit);
         this.resetWindow = resetWindow.isNegative() || resetWindow.isZero() ? Duration.ofHours(1) : resetWindow;
+        this.deviceLimit = Math.max(1, deviceLimit);
+        this.deviceWindow = deviceWindow.isNegative() || deviceWindow.isZero() ? Duration.ofMinutes(1) : deviceWindow;
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         if (!"POST".equalsIgnoreCase(request.getMethod())) return true;
         String path = request.getRequestURI();
-        return !"/api/auth/login".equals(path) && !"/api/auth/forgot-password".equals(path);
+        return !"/api/auth/login".equals(path) && !"/api/auth/forgot-password".equals(path)
+                && !path.matches("/api/device-inputs/\\d+/heartbeat");
     }
 
     @Override
@@ -50,8 +57,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String path = request.getRequestURI();
         boolean login = "/api/auth/login".equals(path);
-        Duration window = login ? loginWindow : resetWindow;
-        int limit = login ? loginLimit : resetLimit;
+        boolean device = path.startsWith("/api/device-inputs/");
+        Duration window = login ? loginWindow : device ? deviceWindow : resetWindow;
+        int limit = login ? loginLimit : device ? deviceLimit : resetLimit;
         String key = path + "|" + request.getRemoteAddr();
         long now = System.currentTimeMillis();
         Window bucket = windows.computeIfAbsent(key, ignored -> new Window());
@@ -81,7 +89,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private void prune(long now) {
         windows.forEach((key, bucket) -> {
             synchronized (bucket) {
-                if (bucket.events.isEmpty() || now - bucket.events.peekLast() > (loginWindow.compareTo(resetWindow) >= 0 ? loginWindow : resetWindow).toMillis()) {
+                Duration longestWindow = loginWindow.compareTo(resetWindow) >= 0 ? loginWindow : resetWindow;
+                if (deviceWindow.compareTo(longestWindow) > 0) longestWindow = deviceWindow;
+                if (bucket.events.isEmpty() || now - bucket.events.peekLast() > longestWindow.toMillis()) {
                     windows.remove(key, bucket);
                 }
             }

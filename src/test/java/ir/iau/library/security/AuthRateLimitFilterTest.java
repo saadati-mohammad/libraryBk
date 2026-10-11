@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AuthRateLimitFilterTest {
     @Test
     void throttlesLoginByRemoteAddressAndDoesNotTrustForwardedIpHeader() throws Exception {
-        var filter = new AuthRateLimitFilter(new ObjectMapper(), 1, Duration.ofHours(1), 1, Duration.ofHours(1));
+        var filter = new AuthRateLimitFilter(new ObjectMapper(), 1, Duration.ofHours(1), 1, Duration.ofHours(1), 1, Duration.ofMinutes(1));
         AtomicInteger passed = new AtomicInteger();
         FilterChain chain = (request, response) -> passed.incrementAndGet();
 
@@ -34,7 +34,7 @@ class AuthRateLimitFilterTest {
 
     @Test
     void limitsPasswordRecoverySeparatelyFromLogin() throws Exception {
-        var filter = new AuthRateLimitFilter(new ObjectMapper(), 1, Duration.ofHours(1), 1, Duration.ofHours(1));
+        var filter = new AuthRateLimitFilter(new ObjectMapper(), 1, Duration.ofHours(1), 1, Duration.ofHours(1), 1, Duration.ofMinutes(1));
         AtomicInteger passed = new AtomicInteger();
         FilterChain chain = (request, response) -> passed.incrementAndGet();
 
@@ -44,6 +44,21 @@ class AuthRateLimitFilterTest {
 
         assertThat(passed).hasValue(1);
         assertThat(blockedResponse.getStatus()).isEqualTo(429);
+    }
+
+    @Test
+    void throttlesInvalidDeviceHeartbeatCredentialsBeforeDatabaseWork() throws Exception {
+        var filter = new AuthRateLimitFilter(new ObjectMapper(), 10, Duration.ofHours(1), 10, Duration.ofHours(1), 1, Duration.ofMinutes(1));
+        AtomicInteger passed = new AtomicInteger();
+        FilterChain chain = (request, response) -> passed.incrementAndGet();
+
+        filter.doFilter(request("/api/device-inputs/42/heartbeat"), new MockHttpServletResponse(), chain);
+        var blockedResponse = new MockHttpServletResponse();
+        filter.doFilter(request("/api/device-inputs/42/heartbeat"), blockedResponse, chain);
+
+        assertThat(passed).hasValue(1);
+        assertThat(blockedResponse.getStatus()).isEqualTo(429);
+        assertThat(blockedResponse.getHeader("Retry-After")).isNotBlank();
     }
 
     private MockHttpServletRequest request(String path) {
