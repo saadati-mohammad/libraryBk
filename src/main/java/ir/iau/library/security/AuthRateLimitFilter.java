@@ -61,7 +61,10 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         boolean device = path.startsWith("/api/device-inputs/") || path.startsWith("/api/phone-scanner/sessions/");
         Duration window = login ? loginWindow : device ? deviceWindow : resetWindow;
         int limit = login ? loginLimit : device ? deviceLimit : resetLimit;
-        String key = path + "|" + request.getRemoteAddr();
+        String scope = path.startsWith("/api/device-inputs/") ? "/api/device-inputs/*/heartbeat"
+                : path.startsWith("/api/phone-scanner/sessions/") ? "/api/phone-scanner/sessions/*/scans"
+                : path;
+        String key = scope + "|" + request.getRemoteAddr();
         long now = System.currentTimeMillis();
         Window bucket = windows.computeIfAbsent(key, ignored -> new Window());
         long retryMillis;
