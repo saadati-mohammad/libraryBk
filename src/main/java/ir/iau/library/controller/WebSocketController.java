@@ -290,22 +290,27 @@ public class WebSocketController {
                 return;
             }
 
-            var response = messageService.markAsRead(Long.parseLong(message.getOriginalMessageId()));
+            Long messageId = Long.parseLong(message.getOriginalMessageId());
+            var originalMessage = messageService.getMessageById(messageId);
+            if (originalMessage == null || !originalMessage.isSuccess() || originalMessage.getData() == null
+                    || !sender.equals(originalMessage.getData().getRecipient())) {
+                sendErrorToUser(sender, "شما اجازه علامت‌گذاری این پیام را ندارید");
+                return;
+            }
+
+            var response = messageService.markAsRead(messageId);
 
             if (response.isSuccess()) {
                 // اطلاع‌رسانی به فرستنده اصلی پیام
-                var originalMessage = messageService.getMessageById(Long.parseLong(message.getOriginalMessageId()));
-                if (originalMessage.isSuccess() && originalMessage.getData() != null) {
-                    WebSocketMessage readConfirmation = WebSocketMessage.builder()
-                            .id(message.getId())
-                            .originalMessageId(message.getOriginalMessageId())
-                            .messageType("read_confirmation")
-                            .sender(sender)
-                            .timestamp(System.currentTimeMillis())
-                            .build();
+                WebSocketMessage readConfirmation = WebSocketMessage.builder()
+                        .id(message.getId())
+                        .originalMessageId(message.getOriginalMessageId())
+                        .messageType("read_confirmation")
+                        .sender(sender)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
 
-                    webSocketService.sendMessageToUser(originalMessage.getData().getSender(), readConfirmation);
-                }
+                webSocketService.sendMessageToUser(originalMessage.getData().getSender(), readConfirmation);
 
                 log.info("Message marked as read successfully");
             } else {

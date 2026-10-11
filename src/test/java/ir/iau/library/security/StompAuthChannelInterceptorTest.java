@@ -13,6 +13,11 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import ir.iau.library.repository.MemberAccountRepository;
+import ir.iau.library.repository.StaffAccountRepository;
+import ir.iau.library.entity.StaffAccount;
+import org.mockito.Mockito;
+import java.util.Optional;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -43,7 +48,12 @@ class StompAuthChannelInterceptorTest {
         DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
         factory.registerSingleton("testUserDetailsService", (UserDetailsService) username ->
                 User.withUsername(username).password("test-hash").roles("ADMIN").build());
-        interceptor = new StompAuthChannelInterceptor(jwtService, factory.getBeanProvider(UserDetailsService.class));
+        StaffAccountRepository staffAccounts = Mockito.mock(StaffAccountRepository.class);
+        Mockito.when(staffAccounts.findByUsernameIgnoreCase(Mockito.anyString()))
+                .thenReturn(Optional.of(new StaffAccount()));
+        AuthVersionService versions = new AuthVersionService(staffAccounts,
+                Mockito.mock(MemberAccountRepository.class));
+        interceptor = new StompAuthChannelInterceptor(jwtService, factory.getBeanProvider(UserDetailsService.class), versions);
         channel = new MessageChannel() {
             @Override public boolean send(Message<?> message) { return true; }
             @Override public boolean send(Message<?> message, long timeout) { return true; }
@@ -73,6 +83,14 @@ class StompAuthChannelInterceptorTest {
         StompHeaderAccessor out = StompHeaderAccessor.wrap(result);
         assertThat(out.getUser()).isNotNull();
         assertThat(out.getUser().getName()).isEqualTo("admin");
+    }
+
+    @Test
+    void revokedCredentialVersionCannotOpenWebSocketConnection() {
+        String staleToken = jwtService.generateToken("admin", "ADMIN", 4L);
+        assertThatThrownBy(() -> interceptor.preSend(connectMessage("Bearer " + staleToken), channel))
+                .isInstanceOf(JwtAuthenticationException.class)
+                .hasMessageContaining("credentials have been revoked");
     }
 
     @Test
@@ -162,6 +180,17 @@ class StompAuthChannelInterceptorTest {
     }
 
     @Test
+    void sendToBrokerTopicIsRejectedEvenWithMatchingSender() {
+        StompHeaderAccessor accessor = authenticatedAccessor("admin", StompCommand.SEND);
+        accessor.setDestination("/topic/user/victim");
+        WebSocketMessage payload = WebSocketMessage.builder().sender("admin").recipient("bob").build();
+
+        assertThatThrownBy(() -> interceptor.preSend(sendMessage(accessor, payload), channel))
+                .isInstanceOf(JwtAuthenticationException.class)
+                .hasMessageContaining("destination is not permitted");
+    }
+
+    @Test
     void unauthenticatedSendIsRejected() {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
         WebSocketMessage payload = WebSocketMessage.builder().sender("admin").build();
@@ -175,6 +204,8 @@ class StompAuthChannelInterceptorTest {
         accessor.setUser(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                 username, null, java.util.List.of(
                         new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
+        ((org.springframework.security.authentication.UsernamePasswordAuthenticationToken) accessor.getUser()).setDetails(0L);
+        if (command == StompCommand.SEND) accessor.setDestination("/app/chat.send");
         accessor.setLeaveMutable(true);
         return accessor;
     }
