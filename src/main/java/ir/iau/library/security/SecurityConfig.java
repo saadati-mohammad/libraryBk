@@ -65,6 +65,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Allow CORS preflight through unauthenticated.
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Phone scanner uses a random, short-lived, per-session capability token.
+                        // It cannot access any other API resource through this public route.
+                        .requestMatchers("/api/phone-scanner/**").permitAll()
                         // Login and account creation are public authentication operations.
                         .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
                         // The public catalog is read-only and exposes a restricted DTO.
