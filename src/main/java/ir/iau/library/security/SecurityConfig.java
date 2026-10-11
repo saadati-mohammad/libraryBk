@@ -81,6 +81,8 @@ public class SecurityConfig {
                         // Phone scanner uses a random, short-lived, per-session capability token.
                         // It cannot access any other API resource through this public route.
                         .requestMatchers("/api/phone-scanner/**").permitAll()
+                        // A registered device can only update its last-seen timestamp with its device token.
+                        .requestMatchers(HttpMethod.POST, "/api/device-inputs/*/heartbeat").permitAll()
                         // Login and account creation are public authentication operations.
                         .requestMatchers("/api/auth/login", "/api/auth/register",
                                 "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()

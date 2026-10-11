@@ -21,6 +21,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -345,6 +346,14 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error("شما مجاز به دسترسی به این منبع نیستید"));
+    }
+
+    /** Preserve deliberate HTTP statuses from domain services instead of masking them as 500. */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Object>> handleResponseStatus(ResponseStatusException ex) {
+        String reason = ex.getReason();
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(ApiResponse.error(reason == null || reason.isBlank() ? "درخواست قابل انجام نیست" : reason));
     }
 
     /**
