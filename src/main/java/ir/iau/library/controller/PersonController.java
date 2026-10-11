@@ -4,23 +4,34 @@ import ir.iau.library.dto.PersonDto;
 import ir.iau.library.dto.PersonFilterDto;
 import ir.iau.library.entity.Person;
 import ir.iau.library.service.EntityMapper;
+import ir.iau.library.service.ImageContentType;
 import ir.iau.library.service.PersonService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/person")
 public class PersonController {
+
+    /**
+     * Sortable properties: only the member's own persistent fields. A blank or unknown
+     * value is rejected with a 400 rather than failing deep inside Spring Data as a 500.
+     */
+    private static final Set<String> SORTABLE_PROPERTIES = Set.of(
+            "id", "firstName", "lastName", "email", "nationalId", "phone", "birthDate",
+            "membershipDate", "membershipType", "address", "notes", "active");
 
     @Autowired
     private PersonService personService;
@@ -35,10 +46,7 @@ public class PersonController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id,desc") String sort) {
 
-        String[] sortParts = sort.split(",");
-        Sort.Direction direction = sortParts.length > 1 ? Sort.Direction.fromString(sortParts[1]) : Sort.Direction.DESC;
-        Sort sortOrder = Sort.by(direction, sortParts[0]);
-        Pageable pageable = PageRequest.of(page, size, sortOrder);
+        Pageable pageable = PageableFactory.of(page, size, sort, SORTABLE_PROPERTIES, Sort.Direction.DESC);
 
         // Map to DTOs so the LONGBLOB profile picture is never serialized into list responses.
         return entityMapper.toPersonDtoPage(personService.findAllFiltered(filter, pageable));
@@ -50,6 +58,27 @@ public class PersonController {
                 .map(entityMapper::toDto)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Serves the stored profile picture.
+     *
+     * <p>The read model omits the blob, so this endpoint is the only way for an authenticated
+     * client to display a member photo. The media type is sniffed from the payload rather than
+     * trusted from the upload header.
+     *
+     * @return 200 with the image bytes and the detected {@code Content-Type}, or 404 when the
+     * member does not exist or has no picture
+     */
+    @GetMapping("/{id}/picture")
+    public ResponseEntity<byte[]> getPersonPicture(@PathVariable Long id) {
+        return personService.getProfilePicture(id)
+                .map(bytes -> ResponseEntity.ok()
+                        .contentType(ImageContentType.detect(bytes))
+                        .cacheControl(CacheControl.noCache())
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                        .body(bytes))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping(consumes = {"multipart/form-data"})

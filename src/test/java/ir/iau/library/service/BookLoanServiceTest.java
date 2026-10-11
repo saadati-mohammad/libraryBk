@@ -65,6 +65,7 @@ class BookLoanServiceTest {
         book = Book.builder()
                 .id(2L)
                 .title("Notes on the Analytical Engine")
+                .copyCount(1)
                 .active(true)
                 .build();
     }
@@ -79,7 +80,7 @@ class BookLoanServiceTest {
         when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
         // createLoan now takes a pessimistic lock on the book, so it calls findByIdForUpdate.
         when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(book));
-        when(loanRepository.findActiveLoanByBook(book)).thenReturn(Optional.empty());
+        when(loanRepository.countActiveLoansByBook(book)).thenReturn(0L);
         when(loanRepository.save(any(BookLoan.class))).thenAnswer(inv -> inv.getArgument(0));
 
         BookLoanDto result = service.createLoan(request);
@@ -123,18 +124,99 @@ class BookLoanServiceTest {
     }
 
     @Test
-    void createLoan_rejectsBookAlreadyOnLoan() {
+    void createLoan_rejectsPersonWithNoActiveFlag() {
+        // A null flag must not NPE (previously `!person.getActive()` unboxed to a 500).
+        Person nullFlag = Person.builder()
+                .id(1L)
+                .email("ada@example.com")
+                .nationalId("1234567890")
+                .active(null)
+                .build();
+
+        CreateLoanRequestDto request = new CreateLoanRequestDto();
+        request.setPersonId(1L);
+        request.setBookId(2L);
+
+        when(personRepository.findById(1L)).thenReturn(Optional.of(nullFlag));
+        when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(book));
+
+        assertThatThrownBy(() -> service.createLoan(request))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(loanRepository, never()).save(any());
+    }
+
+    @Test
+    void createLoan_rejectsBookWhenAllCopiesAreOnLoan() {
         CreateLoanRequestDto request = new CreateLoanRequestDto();
         request.setPersonId(1L);
         request.setBookId(2L);
 
         when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
         when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(book));
-        when(loanRepository.findActiveLoanByBook(book))
-                .thenReturn(Optional.of(BookLoan.builder().id(9L).status(LoanStatus.ON_LOAN).build()));
+        when(loanRepository.countActiveLoansByBook(book)).thenReturn(1L);
 
         assertThatThrownBy(() -> service.createLoan(request))
                 .isInstanceOf(IllegalStateException.class);
+
+        verify(loanRepository, never()).save(any());
+    }
+
+    @Test
+    void createLoan_allowsAnotherCopyWhenAggregateInventoryHasCapacity() {
+        book.setCopyCount(2);
+        CreateLoanRequestDto request = new CreateLoanRequestDto();
+        request.setPersonId(1L);
+        request.setBookId(2L);
+
+        when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
+        when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(book));
+        when(loanRepository.countActiveLoansByBook(book)).thenReturn(1L);
+        when(loanRepository.save(any(BookLoan.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        BookLoanDto result = service.createLoan(request);
+
+        assertThat(result.getStatus()).isEqualTo(LoanStatus.ON_LOAN);
+        ArgumentCaptor<BookLoan> savedLoan = ArgumentCaptor.forClass(BookLoan.class);
+        verify(loanRepository).save(savedLoan.capture());
+        assertThat(savedLoan.getValue().getStatus()).isEqualTo(LoanStatus.ON_LOAN);
+    }
+
+    @Test
+    void createLoan_rejectsZeroCopyInventory() {
+        book.setCopyCount(0);
+        CreateLoanRequestDto request = new CreateLoanRequestDto();
+        request.setPersonId(1L);
+        request.setBookId(2L);
+
+        when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
+        when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(book));
+        when(loanRepository.countActiveLoansByBook(book)).thenReturn(0L);
+
+        assertThatThrownBy(() -> service.createLoan(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No copies");
+        verify(loanRepository, never()).save(any());
+    }
+
+    /**
+     * Soft-deleted books keep their row so loan history survives, which means the loan path
+     * must reject them explicitly — otherwise a deleted book could still be handed out.
+     */
+    @Test
+    void createLoan_rejectsSoftDeletedBook() {
+        Book inactive = Book.builder().id(2L).title("Deleted").active(false).build();
+
+        CreateLoanRequestDto request = new CreateLoanRequestDto();
+        request.setPersonId(1L);
+        request.setBookId(2L);
+
+        when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
+        when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(inactive));
+
+        assertThatThrownBy(() -> service.createLoan(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not active");
 
         verify(loanRepository, never()).save(any());
     }

@@ -28,10 +28,10 @@ public class MessageService {
     private final MessageMapper messageMapper;
 
     /**
-     * دریافت پیام‌های مکال-مه بین دو کاربر
+     * دریافت پیام‌های مکالمه بین دو کاربر
      * <p>
      * ورودی: ConversationCriteria
-     * - senderUsername: نام کاربری فرستنده
+     * - senderUsername: نام کاربری فرستنده (باید همان کاربر احراز هویت‌شده باشد)
      * - recipientUsername: نام کاربری گیرنده
      * - page: شماره صفحه (پیش‌فرض: 0)
      * - size: تعداد آیتم در هر صفحه (پیش‌فرض: 15)
@@ -228,7 +228,7 @@ public class MessageService {
             log.info("Searching messages with query: {}", criteria.getQuery());
 
             Pageable pageable = PageRequest.of(criteria.getPage(), criteria.getSize());
-            Page<Message> messages = messageRepository.searchMessages(criteria.getQuery(), criteria.getSender(), criteria.getSubject(), criteria.getPriority(), criteria.getStartDate(), criteria.getEndDate(), pageable);
+            Page<Message> messages = messageRepository.searchMessages(criteria.getUsername(), criteria.getQuery(), criteria.getSender(), criteria.getSubject(), criteria.getPriority(), criteria.getStartDate(), criteria.getEndDate(), pageable);
 
             Page<MessageDto> messageDtos = messages.map(messageMapper::toDto);
 

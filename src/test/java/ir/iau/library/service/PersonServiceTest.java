@@ -2,6 +2,7 @@ package ir.iau.library.service;
 
 import ir.iau.library.entity.Person;
 import ir.iau.library.repository.PersonRepository;
+import ir.iau.library.repository.MemberAccountRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +25,9 @@ class PersonServiceTest {
 
     @Mock
     private PersonRepository personRepository;
+
+    @Mock
+    private MemberAccountRepository memberAccountRepository;
 
     @InjectMocks
     private PersonService personService;

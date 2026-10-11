@@ -3,6 +3,7 @@ package ir.iau.library.service;
 import ir.iau.library.dto.ApiResponse;
 import ir.iau.library.dto.FileAttachmentDto;
 import ir.iau.library.entity.FileAttachment;
+import ir.iau.library.entity.Message;
 import ir.iau.library.repository.FileAttachmentRepository;
 import ir.iau.library.repository.MessageRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -147,6 +149,36 @@ public class FileService {
                 .orElseThrow(() -> new Exception("File not found"));
 
         return messageMapper.toDto(fileAttachment);
+    }
+
+    /**
+     * Sender/recipient of the message that owns an attachment.
+     *
+     * <p>Exposes only the two usernames a controller needs to authorize a caller; the
+     * message entity (and its lazy associations) never leaves the transaction.
+     */
+    public record AttachmentOwnership(String sender, String recipient) {
+    }
+
+    /**
+     * Ownership of the message that owns {@code fileId}, or empty when the file does not
+     * exist or is not attached to any message.
+     */
+    public Optional<AttachmentOwnership> findAttachmentOwnership(Long fileId) {
+        return fileAttachmentRepository.findById(fileId)
+                .map(FileAttachment::getMessage)
+                .map(FileService::toOwnership);
+    }
+
+    /**
+     * Ownership of a message, or empty when no such message exists.
+     */
+    public Optional<AttachmentOwnership> findMessageOwnership(Long messageId) {
+        return messageRepository.findById(messageId).map(FileService::toOwnership);
+    }
+
+    private static AttachmentOwnership toOwnership(Message message) {
+        return new AttachmentOwnership(message.getSender(), message.getRecipient());
     }
 
     /**

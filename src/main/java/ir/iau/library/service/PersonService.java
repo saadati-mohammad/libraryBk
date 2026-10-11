@@ -3,6 +3,7 @@ package ir.iau.library.service;
 import ir.iau.library.dto.PersonFilterDto;
 import ir.iau.library.entity.Person;
 import ir.iau.library.repository.PersonRepository;
+import ir.iau.library.repository.MemberAccountRepository;
 import ir.iau.library.specification.PersonSpecification;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
@@ -21,6 +22,9 @@ public class PersonService {
 
     @Autowired
     private PersonRepository personRepository;
+
+    @Autowired
+    private MemberAccountRepository memberAccountRepository;
 
     public Page<Person> findAllFiltered(PersonFilterDto filter, Pageable pageable) {
         return personRepository.findAll(PersonSpecification.filter(filter), pageable);
@@ -60,6 +64,10 @@ public class PersonService {
         person.setNotes(personDetails.getNotes());
         person.setActive(personDetails.getActive());
 
+        // The member login name follows the staff-approved email change atomically.
+        memberAccountRepository.findByPersonId(id).ifPresent(account ->
+                account.setUsername(personDetails.getEmail().strip().toLowerCase(java.util.Locale.ROOT)));
+
         if (profilePicture != null && !profilePicture.isEmpty()) {
             person.setProfilePicture(profilePicture.getBytes());
         } else if (personDetails.getProfilePicture() == null) {
@@ -76,5 +84,18 @@ public class PersonService {
                 .orElseThrow(() -> new EntityNotFoundException("Person not found with id " + id));
         person.setActive(false);
         personRepository.save(person);
+    }
+
+    /**
+     * Reads the stored profile picture inside the service transaction, so the blob is
+     * initialised while the persistence context is still open (the entity/blob must never be
+     * dereferenced from a detached instance in the controller).
+     *
+     * @return the image bytes, or empty when the member has no picture
+     */
+    public Optional<byte[]> getProfilePicture(Long id) {
+        return personRepository.findById(id)
+                .map(Person::getProfilePicture)
+                .filter(bytes -> bytes != null && bytes.length > 0);
     }
 }

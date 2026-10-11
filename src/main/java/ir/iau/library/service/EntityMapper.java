@@ -44,6 +44,9 @@ public class EntityMapper {
                 .columnNumber(book.getColumnNumber())
                 .positionNote(book.getPositionNote())
                 .active(book.getActive())
+                // Only the flag crosses the API boundary; the bytes are served by
+                // GET /api/book/{id}/cover so a list response never carries image payloads.
+                .hasCover(hasBytes(book.getBookCoverFile()))
                 .build();
     }
 
@@ -66,7 +69,13 @@ public class EntityMapper {
                 .address(person.getAddress())
                 .notes(person.getNotes())
                 .active(person.getActive())
+                // Flag only; the picture bytes come from GET /api/person/{id}/picture.
+                .hasPicture(hasBytes(person.getProfilePicture()))
                 .build();
+    }
+
+    private static boolean hasBytes(byte[] image) {
+        return image != null && image.length > 0;
     }
 
     public Page<PersonDto> toPersonDtoPage(Page<Person> page) {

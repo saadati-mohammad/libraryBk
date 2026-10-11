@@ -36,6 +36,12 @@ public class ReservationController {
         return ResponseEntity.ok(entityMapper.toDto(updated));
     }
 
+    @PutMapping("/{id}/cancel")
+    public ResponseEntity<ReservationDto> cancelReservation(@PathVariable Long id) {
+        Reservation updated = reservationService.cancelReservation(id);
+        return ResponseEntity.ok(entityMapper.toDto(updated));
+    }
+
     @GetMapping("/active")
     public List<ReservationDto> listActive() {
         return reservationService.getActiveReservations().stream()

@@ -4,6 +4,7 @@ import ir.iau.library.entity.Book;
 import ir.iau.library.entity.Person;
 import ir.iau.library.repository.BookRepository;
 import ir.iau.library.repository.PersonRepository;
+import ir.iau.library.repository.MemberAccountRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -29,6 +30,9 @@ class CreateMassAssignmentTest {
 
     @Mock
     private PersonRepository personRepository;
+
+    @Mock
+    private MemberAccountRepository memberAccountRepository;
 
     @InjectMocks
     private BookService bookService;

@@ -87,25 +87,6 @@ public class BookSpecification {
                 predicates.add(cb.like(cb.lower(root.get("positionNote")), "%" + criteria.getPositionNote().toLowerCase() + "%"));
             }
 
-            // The 'available' filter logic from original specification, if needed:
-            /*
-            if (criteria.getAvailable() != null) {
-                Subquery<Long> sub = query.subquery(Long.class);
-                Root<Book> subRoot = sub.from(Book.class);
-                Join<?, ?> loans = subRoot.join("loans", JoinType.LEFT);
-                sub.select(subRoot.get("id"))
-                        .where(cb.and(
-                                cb.equal(subRoot.get("id"), root.get("id")),
-                                cb.equal(loans.get("status"), LoanStatus.ON_LOAN) // Ensure LoanStatus enum is imported
-                        ));
-                if (criteria.getAvailable()) {
-                    predicates.add(cb.not(cb.exists(sub)));
-                } else {
-                    predicates.add(cb.exists(sub));
-                }
-            }
-            */
-
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }

@@ -2,15 +2,25 @@ package ir.iau.library.exception;
 
 import ir.iau.library.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -95,6 +105,48 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.badRequest()
                 .body(ApiResponse.error("حجم فایل بیش از حد مجاز است"));
+    }
+
+    /**
+     * مدیریت نبود بخش (part) الزامی در درخواست multipart.
+     *
+     * <p>مثلاً {@code POST /api/excel-import/books} بدون بدنهٔ فایل، یا {@code POST /api/book}
+     * بدون بخش {@code book}. بدون این mapper، Spring استثنای زیرساختی پرتاب می‌کرد و پاسخ
+     * به‌اشتباه ۵۰۰ می‌شد؛ در حالی که این یک خطای ورودی کاربر است.
+     */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMissingServletRequestPart(
+            MissingServletRequestPartException ex) {
+
+        log.warn("Missing multipart part: {}", ex.getRequestPartName());
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("بخش «" + ex.getRequestPartName() + "» در درخواست ارسال نشده است"));
+    }
+
+    /**
+     * مدیریت درخواست multipart نامعتبر/ناقص (مثلاً بدنهٔ خالی یا Content-Type نادرست).
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMultipartException(MultipartException ex) {
+
+        log.warn("Invalid multipart request: {}", ex.getMessage());
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("درخواست چندبخشی نامعتبر است؛ فایل یا داده ارسال نشده است"));
+    }
+
+    /**
+     * مدیریت نوع رسانهٔ پشتیبانی‌نشده (مثلاً ارسال JSON به endpoint چندبخشی).
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMediaTypeNotSupported(
+            HttpMediaTypeNotSupportedException ex) {
+
+        log.warn("Unsupported media type: {}", ex.getContentType());
+
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(ApiResponse.error("نوع محتوای درخواست پشتیبانی نمی‌شود"));
     }
 
     /**
@@ -199,6 +251,100 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("خطای داخلی سرور. لطفاً دوباره تلاش کنید"));
+    }
+
+    /**
+     * بدنهٔ درخواست JSON نامعتبر یا ناقص است ({@code HttpMessageNotReadableException}).
+     * بدون این mapper، یک JSON خراب به‌عنوان خطای عمومی ۵۰۰ بازگردانده می‌شد.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMessageNotReadable(
+            HttpMessageNotReadableException ex) {
+
+        log.warn("Unreadable request body: {}", ex.getMessage());
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("بدنهٔ درخواست نامعتبر یا ناقص است"));
+    }
+
+    /**
+     * پارامتر اجباری کوئری ارسال نشده است.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMissingRequestParameter(
+            MissingServletRequestParameterException ex) {
+
+        log.warn("Missing required request parameter: {}", ex.getParameterName());
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("پارامتر اجباری '" + ex.getParameterName() + "' ارسال نشده است"));
+    }
+
+    /**
+     * نوع مقدار پارامتر (مسیر/کوئری) با نوع مورد انتظار هم‌خوان نیست.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Object>> handleArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException ex) {
+
+        log.warn("Argument type mismatch for '{}': {}", ex.getName(), ex.getMessage());
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("مقدار پارامتر '" + ex.getName() + "' نامعتبر است"));
+    }
+
+    /**
+     * متد HTTP برای این مسیر پشتیبانی نمی‌شود (مثلاً POST روی یک GET).
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex) {
+
+        log.warn("HTTP method not supported: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiResponse.error("متد درخواست برای این سرویس پشتیبانی نمی‌شود"));
+    }
+
+    /**
+     * نقض محدودیت‌های پایگاه داده (کلید یکتا، کلید خارجی، فیلد NOT NULL).
+     * متن خام پایگاه داده هرگز به کلاینت بازگردانده نمی‌شود.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex) {
+
+        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("این عملیات با محدودیت‌های داده در تضاد است (مقدار تکراری یا وابستگی موجود)"));
+    }
+
+    /**
+     * ویژگی مرتب‌سازی ناموجود در مدل (مثلاً {@code ?sort=doesNotExist}).
+     * بدون این mapper، Spring Data یک خطای عمیق چارچوب پرتاب می‌کرد که به‌صورت ۵۰۰ دیده می‌شد.
+     */
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ApiResponse<Object>> handlePropertyReference(PropertyReferenceException ex) {
+
+        log.warn("Unknown sort/filter property: {}", ex.getPropertyName());
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("پارامتر مرتب‌سازی نامعتبر است: " + ex.getPropertyName()));
+    }
+
+    /**
+     * عدم دسترسی کاربر احراز هویت‌شده به منبع (مثلاً پیام یا فایل کاربر دیگر).
+     * {@code org.springframework.security.access.AccessDeniedException} زیرمجموعهٔ
+     * RuntimeException است، بنابراین بدون این mapper به‌اشتباه ۵۰۰ بازگردانده می‌شد.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleAccessDenied(AccessDeniedException ex) {
+
+        log.warn("Access denied: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("شما مجاز به دسترسی به این منبع نیستید"));
     }
 
     /**

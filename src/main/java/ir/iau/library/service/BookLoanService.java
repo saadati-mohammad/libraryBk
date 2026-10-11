@@ -44,14 +44,24 @@ public class BookLoanService {
                 .orElseThrow(() -> new EntityNotFoundException("Book not found"));
 
         // Business rule: Person must be active
-        if (!person.getActive()) {
+        if (!Boolean.TRUE.equals(person.getActive())) {
             throw new IllegalStateException("Person is not active and cannot borrow books.");
         }
 
-        // Business rule: Book must be available
-        loanRepository.findActiveLoanByBook(book).ifPresent(loan -> {
-            throw new IllegalStateException("Book is currently on loan and not available.");
-        });
+        // Business rule: a soft-deleted (inactive) book cannot be loaned. BookService
+        // deleteBookById only flips this flag, so without this check a deleted book could
+        // still be handed out by id.
+        if (!Boolean.TRUE.equals(book.getActive())) {
+            throw new IllegalStateException("Book is not active and cannot be loaned.");
+        }
+
+        // Inventory is intentionally tracked as an aggregate number of copies per title.
+        // The pessimistic lock serializes this capacity check and loan insert for the title.
+        int totalCopies = book.getCopyCount() == null ? 1 : book.getCopyCount();
+        long activeLoans = loanRepository.countActiveLoansByBook(book);
+        if (activeLoans >= totalCopies) {
+            throw new IllegalStateException("No copies of this book are currently available.");
+        }
 
         BookLoan newLoan = BookLoan.builder()
                 .person(person)
@@ -114,7 +124,11 @@ public class BookLoanService {
         }
     }
 
-    private BookLoanDto convertToDto(BookLoan loan) {
+    /**
+     * Maps a loan entity to its read model. Public because the dashboard summary reuses it
+     * for its "recent loans" list: keeping one mapping avoids the two drifting apart.
+     */
+    public BookLoanDto convertToDto(BookLoan loan) {
         return BookLoanDto.builder()
                 .id(loan.getId())
                 .loanDate(loan.getLoanDate())

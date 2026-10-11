@@ -21,6 +21,10 @@ public class SearchCriteria {
     private Boolean isActive;
     private LocalDateTime startDate;
     private LocalDateTime endDate;
+    /** Authenticated caller: results are always restricted to messages this user participates in. */
+    private String username;
+    @Builder.Default
     private int page = 0;
+    @Builder.Default
     private int size = 15;
 }

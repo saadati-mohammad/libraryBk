@@ -95,9 +95,10 @@ public class ExcelImportService {
                 bookDto.setEdition(getCellValueAsString(row.getCell(14), dataFormatter));
 
                 String activeStr = getCellValueAsString(row.getCell(15), dataFormatter);
-                if (activeStr != null) {
-                    bookDto.setActive(activeStr.equalsIgnoreCase("TRUE") || activeStr.equalsIgnoreCase("فعال") || activeStr.equals("1"));
-                }
+                // A blank/absent cell means ACTIVE. Leaving the flag null produced a book that
+                // is invisible to ?active=true listings, uncounted on the dashboard and refused
+                // by the loan/reservation guards — i.e. an imported but unusable record.
+                bookDto.setActive(isActiveCell(activeStr));
 
                 String copyCountStr = getCellValueAsString(row.getCell(16), dataFormatter);
                 Integer copyCount = parseIntegerCell(copyCountStr, row.getRowNum(), "copyCount");
@@ -207,7 +208,9 @@ public class ExcelImportService {
                     throw new DuplicateFieldException("National ID", personDto.getNationalId());
                 }
                 if (activeStr != null) {
-                    personDto.setActive(activeStr.equalsIgnoreCase("TRUE") || activeStr.equalsIgnoreCase("فعال") || activeStr.equals("1"));
+                    personDto.setActive(isActiveCell(activeStr));
+                } else {
+                    personDto.setActive(true);
                 }
                 // Handle birthDate and membershipDate fields
                 String birthDateStr = getCellValueAsString(row.getCell(8), dataFormatter);
@@ -250,6 +253,21 @@ public class ExcelImportService {
         }
 
         return personDtos;
+    }
+
+    /**
+     * Interprets the spreadsheet's "active" cell.
+     *
+     * <p>A blank or absent cell means <strong>active</strong>: an imported row must never end up
+     * as a silently unusable record (invisible in active listings, uncounted on the dashboard,
+     * refused by the loan/reservation guards). The explicit values that mean "inactive" are
+     * anything other than {@code TRUE}/{@code فعال}/{@code 1}.
+     */
+    private static boolean isActiveCell(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return true;
+        }
+        return rawValue.equalsIgnoreCase("TRUE") || rawValue.equals("فعال") || rawValue.equals("1");
     }
 
 }

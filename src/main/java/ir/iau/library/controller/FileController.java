@@ -2,6 +2,7 @@ package ir.iau.library.controller;
 
 import ir.iau.library.dto.ApiResponse;
 import ir.iau.library.dto.FileAttachmentDto;
+import ir.iau.library.security.AccessControl;
 import ir.iau.library.service.FileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -15,8 +16,20 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.security.Principal;
 import java.util.List;
 
+/**
+ * Attachment REST surface.
+ *
+ * <p>Attachments belong to a message, so every read/write of a file is gated on the caller
+ * being the sender or the recipient of that message. Before this, any authenticated caller
+ * could download, inspect or delete any other user's attachment by id.
+ *
+ * <p>Only files with no owning message at all (uploaded without a {@code messageId}) remain
+ * readable by any authenticated caller: there is no ownership row to enforce against, and
+ * denying them would make the optional-message upload path unusable.
+ */
 @RestController
 @RequestMapping("/api/v1/files")
 @RequiredArgsConstructor
@@ -24,6 +37,20 @@ import java.util.List;
 public class FileController {
 
     private final FileService fileService;
+
+    /** Fails closed (403) when the file is attached to a message the caller is not part of. */
+    private void requireAttachmentAccess(Long fileId, String caller) {
+        fileService.findAttachmentOwnership(fileId).ifPresent(ownership ->
+                AccessControl.requireParticipant(caller, ownership.sender(), ownership.recipient(),
+                        "file " + fileId));
+    }
+
+    /** Fails closed (403) when the caller does not participate in the message. */
+    private void requireMessageAccess(Long messageId, String caller) {
+        fileService.findMessageOwnership(messageId).ifPresent(ownership ->
+                AccessControl.requireParticipant(caller, ownership.sender(), ownership.recipient(),
+                        "message " + messageId));
+    }
 
     /**
      * Builds an RFC 6266-compliant {@code filename} parameter for Content-Disposition.
@@ -81,11 +108,18 @@ public class FileController {
     @PostMapping("/upload")
     @Operation(summary = "آپلود فایل", description = "آپلود فایل ضمیمه برای پیام")
     public ResponseEntity<ApiResponse<FileAttachmentDto>> uploadFile(
+            Principal principal,
             @Parameter(description = "فایل برای آپلود", required = true)
             @RequestParam("file") MultipartFile file,
 
             @Parameter(description = "شناسه پیام (اختیاری)")
             @RequestParam(value = "messageId", required = false) Long messageId) {
+
+        // Attaching a file to someone else's message would make it visible to that
+        // conversation, so the uploader must already participate in the target message.
+        if (messageId != null) {
+            requireMessageAccess(messageId, AccessControl.requireUsername(principal));
+        }
 
         ApiResponse<FileAttachmentDto> response = fileService.uploadFile(file, messageId);
         return ResponseEntity.ok(response);
@@ -102,8 +136,12 @@ public class FileController {
     @GetMapping("/download/{fileId}")
     @Operation(summary = "دانلود فایل", description = "دانلود فایل ضمیمه بر اساس شناسه")
     public ResponseEntity<Resource> downloadFile(
+            Principal principal,
             @Parameter(description = "شناسه فایل", required = true)
             @PathVariable Long fileId) {
+
+        // Authorize before the try/catch below, which turns any failure into a 404.
+        requireAttachmentAccess(fileId, AccessControl.requireUsername(principal));
 
         try {
             Resource resource = fileService.downloadFile(fileId);
@@ -144,7 +182,10 @@ public class FileController {
     @GetMapping("/info/{fileId}")
     @Operation(summary = "اطلاعات فایل", description = "دریافت اطلاعات کامل فایل")
     public ResponseEntity<ApiResponse<FileAttachmentDto>> getFileInfo(
+            Principal principal,
             @PathVariable Long fileId) {
+
+        requireAttachmentAccess(fileId, AccessControl.requireUsername(principal));
 
         try {
             FileAttachmentDto fileInfo = fileService.getFileInfo(fileId);
@@ -180,7 +221,10 @@ public class FileController {
     @GetMapping("/message/{messageId}")
     @Operation(summary = "فایل‌های پیام", description = "دریافت لیست فایل‌های ضمیمه یک پیام")
     public ResponseEntity<ApiResponse<List<FileAttachmentDto>>> getMessageFiles(
+            Principal principal,
             @PathVariable Long messageId) {
+
+        requireMessageAccess(messageId, AccessControl.requireUsername(principal));
 
         ApiResponse<List<FileAttachmentDto>> response = fileService.getMessageFiles(messageId);
         return ResponseEntity.ok(response);
@@ -201,7 +245,10 @@ public class FileController {
     @DeleteMapping("/delete/{fileId}")
     @Operation(summary = "حذف فایل", description = "حذف فایل ضمیمه از سیستم")
     public ResponseEntity<ApiResponse<String>> deleteFile(
+            Principal principal,
             @PathVariable Long fileId) {
+
+        requireAttachmentAccess(fileId, AccessControl.requireUsername(principal));
 
         ApiResponse<String> response = fileService.deleteFile(fileId);
         return ResponseEntity.ok(response);

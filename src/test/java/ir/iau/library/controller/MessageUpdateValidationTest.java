@@ -1,9 +1,12 @@
 package ir.iau.library.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ir.iau.library.entity.Message;
+import ir.iau.library.repository.MessageRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -32,6 +35,9 @@ class MessageUpdateValidationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private MessageRepository messageRepository;
 
     private String login() throws Exception {
         MvcResult res = mockMvc.perform(post("/api/auth/login")
@@ -68,18 +74,30 @@ class MessageUpdateValidationTest {
     void validBodyIsAcceptedAndNotStoredAsLiteralJson() throws Exception {
         String token = login();
 
-        // No message with id 1 exists in a fresh test DB; the service returns its own
-        // not-found response, but the request must not be rejected with a 500 by the
-        // binding layer. Assert the body was parsed into a string (no braces stored).
-        MvcResult res = mockMvc.perform(put("/api/messages/1")
+        // Message writes are now scoped to the authenticated principal, so the message
+        // being updated is seeded for this caller instead of relying on an empty database.
+        Message seeded = messageRepository.save(Message.builder()
+                .sender("admin")
+                .senderFarsiTitle("Admin")
+                .recipient("binding-target")
+                .recipientFarsiTitle("Target")
+                .subject("binding")
+                .message("original text")
+                .messageStatus("SENT")
+                .isActive(true)
+                .dataState(1)
+                .build());
+
+        MvcResult res = mockMvc.perform(put("/api/messages/" + seeded.getId())
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"message\":\"hello world\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
 
-        String body = res.getResponse().getContentAsString();
-        // The literal JSON must never appear as the stored message text.
-        assertThat(body).doesNotContain("\"message\":\"hello world\"");
+        JsonNode body = objectMapper.readTree(res.getResponse().getContentAsString());
+        assertThat(body.get("success").asBoolean()).isTrue();
+        // The stored text is the plain message, never the literal JSON body.
+        assertThat(body.get("data").get("message").asText()).isEqualTo("hello world");
     }
 }

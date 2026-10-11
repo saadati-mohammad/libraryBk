@@ -28,4 +28,9 @@ public class PersonDto {
     private String address;
     private String notes;
     private Boolean active;
+    /**
+     * True when the member has a stored profile picture. The bytes are served by
+     * {@code GET /api/person/{id}/picture}; the flag keeps image payloads out of list responses.
+     */
+    private Boolean hasPicture;
 }

@@ -37,8 +37,11 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
     Page<Message> findByRecipientAndIsActiveTrue(@Param("username") String username, Pageable pageable);
 
     // جستجوی متنی در پیام‌ها (با فرض اینکه مشکل CLOB حل شده و ستون از نوع VARCHAR است)
+    // :username is the authenticated caller: results are always restricted to messages the
+    // caller sent or received, so search can never expose another user's correspondence.
     @Query("SELECT m FROM Message m WHERE " +
             "m.isActive = true AND " +
+            "(m.sender = :username OR m.recipient = :username) AND " +
             "(:query IS NULL OR LOWER(m.message) LIKE LOWER(CONCAT('%', :query, '%'))) AND " +
             "(:sender IS NULL OR m.sender = :sender) AND " +
             "(:subject IS NULL OR m.subject = :subject) AND " +
@@ -47,6 +50,7 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
             "(:endDate IS NULL OR m.createDate <= :endDate) " +
             "ORDER BY m.createDate DESC")
     Page<Message> searchMessages(
+            @Param("username") String username,
             @Param("query") String query,
             @Param("sender") String sender,
             @Param("subject") String subject,

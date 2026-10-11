@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>Book is created through a multipart part ({@code book=@...json}) and the entity is
  * bound directly from the request, so {@code @Valid @RequestPart} is the path exercised
- * here. Before validation was added, a blank title/author/isbn10/subject was persisted.
+ * here. A title may use either an ISBN-10 or an ISBN-13 identifier.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -51,7 +51,7 @@ class BookValidationTest {
     @Test
     void missingRequiredFieldsReturn400WithFieldMessages() throws Exception {
         String token = login();
-        // No title, author, isbn10 or subject.
+        // No title, author, ISBN identifier or subject.
         String json = "{\"publisher\":\"X\"}";
 
         MvcResult res = mockMvc.perform(multipart("/api/book")
@@ -63,7 +63,7 @@ class BookValidationTest {
         JsonNode body = objectMapper.readTree(res.getResponse().getContentAsString());
         assertThat(body.get("success").asBoolean()).isFalse();
         assertThat(body.get("message").asText())
-                .contains("title").contains("author").contains("isbn10").contains("subject");
+                .contains("title").contains("author").contains("isbn").contains("subject");
     }
 
     @Test
@@ -94,5 +94,22 @@ class BookValidationTest {
         JsonNode body = objectMapper.readTree(res.getResponse().getContentAsString());
         assertThat(body.get("id").asLong()).isPositive();
         assertThat(body.get("title").asText()).isEqualTo("Valid Book");
+    }
+
+    @Test
+    void isbn13OnlyBookIsCreated() throws Exception {
+        String token = login();
+        String json = "{\"title\":\"ISBN-13 Book\",\"author\":\"Author\","
+                + "\"isbn13\":\"9780306406157\",\"subject\":\"Subject\",\"copyCount\":1}";
+
+        MvcResult res = mockMvc.perform(multipart("/api/book")
+                        .file(bookPart(json))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        JsonNode body = objectMapper.readTree(res.getResponse().getContentAsString());
+        assertThat(body.get("isbn13").asText()).isEqualTo("9780306406157");
+        assertThat(body.has("isbnIdentifierPresent")).isFalse();
     }
 }

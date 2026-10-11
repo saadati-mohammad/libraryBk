@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 public class ConversationCriteria {
     private String senderUsername;
     private String recipientUsername;
+    @Builder.Default
     private int page = 0;
+    @Builder.Default
     private int size = 15;
 }

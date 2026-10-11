@@ -2,18 +2,28 @@ package ir.iau.library.controller;
 
 import ir.iau.library.dto.ApiResponse;
 import ir.iau.library.dto.ConversationCriteria;
+import ir.iau.library.dto.MessageDto;
 import ir.iau.library.dto.MessageUpdateRequest;
 import ir.iau.library.dto.SearchCriteria;
 import ir.iau.library.dto.UpdateMessageRequest;
+import ir.iau.library.security.AccessControl;
 import ir.iau.library.service.MessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
+
+/**
+ * Chat/message REST surface.
+ *
+ * <p>Every operation is scoped to the authenticated principal: the caller must be the
+ * sender or the recipient of a message to read, update or delete it, and only the
+ * recipient may mark it read. Before this, the endpoints accepted any id with a valid
+ * token, so any authenticated caller could read or rewrite another user's messages.
+ */
 @RestController
 @RequestMapping("/api/messages")
 @RequiredArgsConstructor
@@ -22,8 +32,36 @@ public class MessageController {
 
     private final MessageService messageService;
 
+    /**
+     * Loads the message only to authorize the caller. A missing message is left to the
+     * service, which owns the not-found response contract.
+     */
+    private MessageDto messageForAuthorization(Long id) {
+        ApiResponse<MessageDto> response = messageService.getMessageById(id);
+        return response != null ? response.getData() : null;
+    }
+
+    /** Caller must be the sender or the recipient. */
+    private void requireParticipant(Long id, String caller) {
+        MessageDto message = messageForAuthorization(id);
+        if (message == null) {
+            return;
+        }
+        AccessControl.requireParticipant(caller, message.getSender(), message.getRecipient(), "message " + id);
+    }
+
+    /** Only the recipient of a message may mark it read. */
+    private void requireRecipient(Long id, String caller) {
+        MessageDto message = messageForAuthorization(id);
+        if (message == null) {
+            return;
+        }
+        AccessControl.requireSelf(caller, message.getRecipient(), "message " + id);
+    }
+
     @GetMapping("/search")
     public ResponseEntity<ApiResponse> searchMessages(
+            Principal principal,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) String sender,
             @RequestParam(required = false) String subject,
@@ -31,13 +69,16 @@ public class MessageController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        try {
-            log.info("Search request - query: {}, sender: {}, subject: {}, priority: {}",
-                    query, sender, subject, priority);
+        // Outside the try/catch below: a denial must reach GlobalExceptionHandler (403),
+        // not be swallowed into a generic 500 response.
+        String caller = AccessControl.requireUsername(principal);
 
-            Pageable pageable = PageRequest.of(page, size);
+        try {
+            log.info("Search request by {} - query: {}, sender: {}, subject: {}, priority: {}",
+                    caller, query, sender, subject, priority);
 
             SearchCriteria criteria = new SearchCriteria();
+            criteria.setUsername(caller);
             criteria.setQuery(query);
             criteria.setSender(sender);
             criteria.setSubject(subject);
@@ -58,16 +99,25 @@ public class MessageController {
 
     @GetMapping("/conversation")
     public ResponseEntity<ApiResponse> getConversationMessages(
-            @RequestParam String senderUsername,
+            Principal principal,
+            // Optional and advisory only: the authenticated principal decides which
+            // conversation is returned, so a caller can never enumerate someone else's.
+            @RequestParam(required = false) String senderUsername,
             @RequestParam String recipientUsername,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size
     ) {
+        String caller = AccessControl.requireUsername(principal);
+        if (senderUsername != null && !senderUsername.isBlank() && !senderUsername.equals(caller)) {
+            log.warn("Ignoring client-supplied senderUsername '{}'; using authenticated caller '{}'",
+                    senderUsername, caller);
+        }
+
         try {
-            log.info("Getting conversation between {} and {}", senderUsername, recipientUsername);
+            log.info("Getting conversation between {} and {}", caller, recipientUsername);
 
             ConversationCriteria criteria = new ConversationCriteria();
-            criteria.setSenderUsername(senderUsername);
+            criteria.setSenderUsername(caller);
             criteria.setRecipientUsername(recipientUsername);
             criteria.setPage(page);
             criteria.setSize(size);
@@ -84,11 +134,14 @@ public class MessageController {
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse> updateMessage(
+            Principal principal,
             @PathVariable Long id,
             @Valid @RequestBody UpdateMessageRequest body) {
         // The raw-body binding previously stored the literal JSON as the message text and
         // skipped validation entirely. Binding the typed record rejects a blank/oversized
         // message with a 400 before it reaches the service.
+        String caller = AccessControl.requireUsername(principal);
+        requireParticipant(id, caller);
         log.info("Updating message {} with new content", id);
 
         MessageUpdateRequest request = new MessageUpdateRequest();
@@ -100,7 +153,10 @@ public class MessageController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse> deleteMessage(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse> deleteMessage(Principal principal, @PathVariable Long id) {
+        String caller = AccessControl.requireUsername(principal);
+        requireParticipant(id, caller);
+
         try {
             log.info("Deleting message {}", id);
 
@@ -114,7 +170,10 @@ public class MessageController {
     }
 
     @PostMapping("/{id}/mark-read")
-    public ResponseEntity<ApiResponse> markAsRead(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse> markAsRead(Principal principal, @PathVariable Long id) {
+        String caller = AccessControl.requireUsername(principal);
+        requireRecipient(id, caller);
+
         try {
             log.info("Marking message {} as read", id);
 

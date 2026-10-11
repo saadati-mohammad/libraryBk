@@ -1,6 +1,7 @@
 package ir.iau.library.service;
 
 import ir.iau.library.dto.BookFilterDto;
+import ir.iau.library.dto.PublicCategoryDto;
 import ir.iau.library.entity.Book;
 import ir.iau.library.repository.BookRepository;
 import ir.iau.library.specification.BookSpecification;
@@ -9,11 +10,14 @@ import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.Optional;
+import java.util.List;
 
 @Service
 @Transactional
@@ -26,12 +30,50 @@ public class BookService {
         return bookRepository.findAll(BookSpecification.filter(filter), pageable);
     }
 
+    /** Public search over safe discovery fields. Internal shelf/location fields are never filters here. */
+    public Page<Book> findPublic(String query, String subject, Pageable pageable) {
+        String term = query == null ? "" : query.strip().toLowerCase();
+        String category = subject == null ? "" : subject.strip().toLowerCase();
+        Specification<Book> spec = (root, criteria, cb) -> {
+            Predicate active = cb.isTrue(root.get("active"));
+            Predicate search = cb.conjunction();
+            if (!term.isBlank()) {
+                String pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+                search = cb.or(
+                        cb.like(cb.lower(root.get("title")), pattern, '\\'),
+                        cb.like(cb.lower(root.get("author")), pattern, '\\'),
+                        cb.like(cb.lower(root.get("publisher")), pattern, '\\'),
+                        cb.like(cb.lower(root.get("subject")), pattern, '\\'),
+                        cb.like(cb.lower(root.get("isbn10")), pattern, '\\'),
+                        cb.like(cb.lower(root.get("isbn13")), pattern, '\\'));
+            }
+            Predicate categoryFilter = category.isBlank() ? cb.conjunction()
+                    : cb.equal(cb.lower(root.get("subject")), category);
+            return cb.and(active, search, categoryFilter);
+        };
+        return bookRepository.findAll(spec, pageable);
+    }
+
+    public List<PublicCategoryDto> publicCategories() {
+        return bookRepository.countActiveSubjects().stream()
+                .map(row -> new PublicCategoryDto(row.getSubject(), row.getTitleCount()))
+                .toList();
+    }
+
     public Book createBook(Book book, MultipartFile bookCoverFile) throws IOException {
         // Never trust a client-supplied identity on create: a set id turns save() into
         // a merge that can overwrite an existing row (mass assignment). The id and the
         // back-reference collection are always server-controlled.
         book.setId(null);
         book.setLoans(null);
+        // A book created without an explicit flag is an ACTIVE book. A null flag used to be
+        // persisted verbatim, which made the record invisible to ?active=true listings,
+        // uncounted on the dashboard and impossible to lend or reserve (the business guards
+        // treat any non-true flag as inactive). PersonService already forces the same default
+        // for members, so this restores symmetry between the two create paths.
+        if (book.getActive() == null) {
+            book.setActive(true);
+        }
         if (bookCoverFile != null && !bookCoverFile.isEmpty()) {
             book.setBookCoverFile(bookCoverFile.getBytes());
         }
@@ -63,7 +105,12 @@ public class BookService {
         book.setRowNumbers(bookDetails.getRowNumbers()); // اضافه شده
         book.setColumnNumber(bookDetails.getColumnNumber()); // اضافه شده
         book.setPositionNote(bookDetails.getPositionNote()); // اضافه شده
-        book.setActive(bookDetails.getActive()); // اضافه شده
+        // Only an explicit flag changes the state: a null means "the client did not send it",
+        // and overwriting the row with null would silently make the book unloanable and
+        // invisible. `false` still deactivates explicitly.
+        if (bookDetails.getActive() != null) {
+            book.setActive(bookDetails.getActive());
+        }
 
         if (bookCoverFile != null && !bookCoverFile.isEmpty()) {
             book.setBookCoverFile(bookCoverFile.getBytes());
@@ -88,13 +135,28 @@ public class BookService {
     public void deleteBookById(Long id) {
         Book book = bookRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Book not found with id " + id));
-        bookRepository.delete(book);
+        // Soft delete: keep the row (and therefore the loan/reservation history) and only
+        // hide the book from active listings. Deleting the row cascaded into its loans via
+        // orphanRemoval and failed outright when a reservation referenced it.
+        book.setActive(false);
+        bookRepository.save(book);
     }
 
     public Optional<Book> getBookById(Long id) {
-        // در حالت عادی، فیلتر active در getBookById هم می‌تواند مفید باشد.
-        // return bookRepository.findById(id).filter(Book::getActive);
-        // اما چون ممکن است برای ویرایش کتاب غیرفعال هم به آن نیاز باشد، فعلا بدون فیلتر فعال بودن
+        // Include inactive books so operators can still inspect and edit deactivated records.
         return bookRepository.findById(id);
+    }
+
+    /**
+     * Reads the stored cover image inside the service transaction, so the blob is initialised
+     * while the persistence context is still open (a detached entity must never be asked for
+     * its lazy blob from the controller).
+     *
+     * @return the image bytes, or empty when the book has no cover
+     */
+    public Optional<byte[]> getCoverImage(Long id) {
+        return bookRepository.findById(id)
+                .map(Book::getBookCoverFile)
+                .filter(bytes -> bytes != null && bytes.length > 0);
     }
 }

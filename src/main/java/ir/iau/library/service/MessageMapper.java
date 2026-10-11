@@ -168,8 +168,13 @@ public class MessageMapper {
                 .recipients(messageDto.getRecipients())
                 .enableSendSms(messageDto.getEnableSendSms())
                 .timestamp(messageDto.getCreateDate() != null ?
-                        java.time.ZoneId.systemDefault().getRules()
-                                .getOffset(messageDto.getCreateDate()).getTotalSeconds() * 1000L :
+                        // Epoch millis of the instant, NOT the zone offset: the old code
+                        // sent getOffset(...).getTotalSeconds() * 1000L (3.5h in Tehran),
+                        // which every client rendered as a 1970 timestamp.
+                        messageDto.getCreateDate()
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .toInstant()
+                                .toEpochMilli() :
                         System.currentTimeMillis())
                 .roomId(messageDto.getRoomId())
                 .build();

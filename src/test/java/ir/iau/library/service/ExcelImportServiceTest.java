@@ -1,6 +1,7 @@
 package ir.iau.library.service;
 
 import ir.iau.library.dto.BookFilterDto;
+import ir.iau.library.entity.Book;
 import ir.iau.library.repository.BookRepository;
 import ir.iau.library.repository.PersonRepository;
 import org.apache.poi.ss.usermodel.Row;
@@ -9,6 +10,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
@@ -17,6 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 
 /**
  * Regression coverage for the Excel book import. The original code called
@@ -41,6 +44,12 @@ class ExcelImportServiceTest {
     }
 
     private MockMultipartFile xlsxWithRow(String pageCount, String copyCount) throws Exception {
+        return xlsxWithRowAndActive(pageCount, copyCount, null);
+    }
+
+    /** @param active {@code null} leaves cell 15 empty (the optional "active" column). */
+    private MockMultipartFile xlsxWithRowAndActive(String pageCount, String copyCount, String active)
+            throws Exception {
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = wb.createSheet("books");
             Row header = sheet.createRow(0);
@@ -52,6 +61,9 @@ class ExcelImportServiceTest {
             row.createCell(2).setCellValue("نویسنده تست"); // author
             row.createCell(9).setCellValue("موضوع تست");   // subject
             row.createCell(12).setCellValue(pageCount);    // pageCount
+            if (active != null) {
+                row.createCell(15).setCellValue(active);   // active (optional)
+            }
             row.createCell(16).setCellValue(copyCount);    // copyCount
             wb.write(out);
             return new MockMultipartFile(
@@ -83,5 +95,35 @@ class ExcelImportServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getPageCount()).isEqualTo(300);
         assertThat(result.get(0).getCopyCount()).isEqualTo(2);
+    }
+
+    /**
+     * The "active" column is optional in the spreadsheet. A blank cell used to leave the flag
+     * null, which produced an imported-but-unusable book (invisible in active listings, refused
+     * by the loan/reservation guards). A missing value must mean active.
+     */
+    @Test
+    void importBooks_treatsABlankActiveCellAsActive() throws Exception {
+        MockMultipartFile file = xlsxWithRow("300", "2");
+
+        service.importBooksFromExcel(file);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Book>> captor = ArgumentCaptor.forClass(List.class);
+        verify(bookRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).singleElement()
+                .extracting(Book::getActive)
+                .isEqualTo(true);
+    }
+
+    @Test
+    void importBooks_honoursAnExplicitInactiveCell() throws Exception {
+        MockMultipartFile file = xlsxWithRowAndActive("300", "2", "FALSE");
+
+        List<BookFilterDto> result = service.importBooksFromExcel(file);
+
+        assertThat(result).singleElement()
+                .extracting(BookFilterDto::getActive)
+                .isEqualTo(false);
     }
 }
