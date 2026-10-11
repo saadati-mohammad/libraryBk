@@ -23,7 +23,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | --- | --- | --- | --- | --- |
 | T-001 | both | Confirm clean starting trees, remotes, history, and create dedicated overhaul branches | DONE | `feature/system-overhaul` created from `master` in both repos; initial trees clean; last commits UI `90c4b40`, API `f6be881` |
 | T-002 | both | Map frontend/backend architecture, routes, endpoints, models, persistence, security, CI and tests | DONE | `docs/SYSTEM_MAP.md` in both repos; source, routes, security matchers, entities, migrations, tests and CI reviewed |
-| T-003 | both | Install dependencies and run baseline build, lint, unit and integration suites | DONE | Baseline 2026-10-11: UI `npm ci --omit=peer`, lint/typecheck, Vitest (28 files/158 tests), production build, audit (0 vulnerabilities), full E2E (73 pass/1 expected viewport-conditional skip); API clean verify 152 tests. Latest API after changes: full H2 `clean verify` 159 tests green. API has no configured lint plugin/script. |
+| T-003 | both | Install dependencies and run baseline build, lint, unit and integration suites | DONE | Baseline 2026-10-11: UI `npm ci --omit=peer`, lint/typecheck, Vitest (28 files/158 tests), production build, audit (0 vulnerabilities), full E2E (73 pass/1 expected viewport-conditional skip); API clean verify 152 tests. Latest API full H2 `clean verify` 158 tests green. API has no configured lint plugin/script. |
 | T-004 | both | Create Phase 0 system map with Mermaid architecture/ERD, API inventory, role matrix, user-facing feature list | DONE | Verified Mermaid maps and inventories in both repo docs |
 | T-005 | both | Audit all user workflows, validations, error/loading/empty states, concurrency, persistence and test coverage | DONE | `docs/AUDIT_REPORT.md`: 18 ranked findings, verified-as-is safeguards, scenario impacts and action mappings; baseline H2/Playwright evidence recorded |
 | T-006 | both | Research required open-source, commercial, regional and adjacent competitors with dated primary sources | DONE | Produce sourced `COMPETITOR_ANALYSIS.md`; separate verified facts from inference |
@@ -40,8 +40,8 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | T-017 | both | Evaluate performance, data integrity, observability, accessibility, Persian/RTL, imports, backups and deployment workflow | TODO | Implement measurable useful work; record justified exclusions |
 | T-018 | both | Run final builds, lint, unit/integration/E2E, scenario walkthrough and update docs/changelog/handoff | TODO | Capture exact evidence and limitations |
 | T-019 | both | Push each atomic task-group commit and open coordinated GitHub PRs | TODO | No force push; do not merge without authority and green CI |
-| T-020 | API | Add safe login and reset-request throttling | TODO | Bounded IP/account buckets; generic responses; proxy trust and tests |
-| T-021 | API | Revoke issued credentials after password reset | TODO | Password/session generation check and stale-token tests |
+| T-020 | API | Add safe login and reset-request throttling | IN-PROGRESS | Per-IP in-process throttle is implemented and unit-tested; E2E uses an explicit 1000-request test ceiling. Production remains default 20/15m and reset 5/hour; shared storage, account bucket and trusted-proxy resolution remain |
+| T-021 | API | Revoke issued credentials after password reset | DONE | Additive `auth_version` migration for staff/member; JWT version checked per request; password-reset integration test proves old token returns 401; API clean verify 158 tests green |
 | T-022 | API | Fail closed for unowned attachment access and invalid message association | DONE | API now requires an active message for upload, denies missing/orphan ownership; `mvnw.cmd -B clean verify` passed 154 tests incl. orphan info/delete denial and upload-without-message rejection (2026-10-11) |
 | T-023 | API | Verify self-registered email before account activation | TODO | Expiring single-use flow, resend controls, configurable mail delivery |
 | T-024 | API | Normalize and validate ISBN across every write path | TODO | Audit existing duplicates before additive uniqueness enforcement |
@@ -58,6 +58,8 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | T-035 | API | Improve production-like verification and CI quality gates | TODO | MySQL migration/locking, static analysis, query/load and operational checks |
 | T-036 | API | Use explicit business timezone and injectable clock for circulation | TODO | Boundary tests; preserve existing behavior in configured default zone |
 | T-037 | both | Document metadata-source coverage and regional provider extension | TODO | Do not claim exhaustive world coverage; record source attribution and gaps |
+| T-040 | both | Audit component/service size, repeated patterns, modularity and testability; refactor hot spots and add enforceable maintainability checks | IN-PROGRESS | UI `BookComponent` reduced from 928 to 858 TS lines by extracting editor/filter forms into `BookFormFactory`; new factory tests cover shared validators/defaults. Existing `PagedFilterPage` already centralizes list/filter behavior across three screens. UI lint/typecheck/production build, 160 unit tests and 74 headed Playwright cases (73 pass/1 expected viewport-conditional skip) green after extraction. UI still has 522/480/352-line reservation/person/loan components; API largest files are `FileService` 416, `GlobalExceptionHandler` 410, `WebSocketController` 397, `MessageService` 393. More responsibility extraction, repeat-pattern review and maintainability gates remain. |
+| T-041 | UI | Repair full-stack CI integration environment and coordinate API branch | IN-PROGRESS | UI CI now sets isolated login/reset throttling ceilings for serial E2E and checks out `libraryBk:feature/system-overhaul`; verified same configuration locally with 22 auth attempts (no 429) and 74 Playwright cases (73 pass, one viewport-conditional skip). Need push and observe GitHub Actions on PR; `gh` CLI is unavailable here. |
 
 ## Decisions
 
@@ -70,6 +72,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | Unowned file attachments must be private by default; orphan recovery should require explicit privileged ownership | Current authenticated-only fallback permits cross-user access by numeric ID. |
 | A unique external ISBN metadata match is not sufficient authority to auto-create a catalog record in a batch | Metadata providers can be incomplete or wrong; retain a review/confirmation boundary. |
 | Migrate existing aggregate book counts into explicit copies only after inspecting legacy loans and defining reconciliation | Inventing per-copy loan allocation risks corrupting circulation history. |
+| Keep production auth throttles strict, but raise the ceiling only in the serial CI browser job | Browser scenarios share one seeded account and loopback IP; they otherwise exhaust the production limit and make unrelated tests fail. A direct 22-request probe confirmed the isolated CI ceiling prevents false 429s. |
 
 ## Known risks / constraints
 
@@ -82,4 +85,4 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 
 ## Next action
 
-Phase 2 source review and gap prioritization are documented in `docs/COMPETITOR_ANALYSIS.md`. Phase 3 story traceability is in `docs/USER_STORIES.md`; implement uncovered critical security/data-integrity stories and add proof before declaring phase done.
+Continue Phase 3/4/5 implementation, starting with safe extensible device-registry contracts; finish T-040 by extracting distinct workflows from oversized screens and enforcing size/complexity gates. Then complete final security/performance/accessibility verification, update both READMEs/changelog/handoff, commit/push each tested task group, and open coordinated PRs. Current verification: UI lint/typecheck/build, 160 unit tests, 74 Playwright cases (73 passed/1 expected skip); API clean verify 159 tests (rerun after remaining changes).
