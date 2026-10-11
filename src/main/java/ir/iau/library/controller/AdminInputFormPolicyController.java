@@ -22,8 +22,9 @@ public class AdminInputFormPolicyController {
 
     @GetMapping("/{formKey}")
     public InputFormPolicyDto get(@PathVariable String formKey, @RequestParam(required = false) String station,
+                                  @RequestParam(required = false) String ownerUsername,
                                   Authentication authentication) {
-        return service.effective(formKey, station, ir.iau.library.entity.InputFormPolicy.GLOBAL_OWNER);
+        return service.effectiveAdmin(formKey, station, ownerUsername);
     }
 
     @PutMapping("/{formKey}")

@@ -53,6 +53,17 @@ public class InputFormPolicyService {
         return toDto(policy);
     }
 
+    @Transactional(readOnly = true)
+    public InputFormPolicyDto effectiveAdmin(String formKey, String station, String ownerUsername) {
+        String owner = ownerUsername == null || ownerUsername.isBlank()
+                ? InputFormPolicy.GLOBAL_OWNER
+                : staffAccounts.findByUsernameIgnoreCase(ownerUsername.trim())
+                        .map(account -> account.getUsername())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Policy owner must be an existing staff account"));
+        return effective(formKey, station, owner);
+    }
+
     @Transactional
     public InputFormPolicyDto savePersonal(String formKey, SaveInputFormPolicyRequest request, String username) {
         return save(formKey, request, username, username);

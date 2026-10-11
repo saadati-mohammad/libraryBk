@@ -129,6 +129,13 @@ class InputFormPolicyIntegrationTest {
                                 "allowedSources", List.of("MANUAL"), "defaultSource", "MANUAL"))))
                 .andExpect(status().isOk());
 
+        MvcResult adminRead = mvc.perform(get("/api/admin/input-policies/loan-checkout")
+                        .param("ownerUsername", target.toUpperCase())
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(mapper.readTree(adminRead.getResponse().getContentAsString()).path("scope").asText())
+                .isEqualTo("user");
+
         String targetToken = jwtService.generateToken(target, "LIBRARIAN");
         MvcResult effective = mvc.perform(get("/api/input-policies/loan-checkout")
                         .header("Authorization", "Bearer " + targetToken))
