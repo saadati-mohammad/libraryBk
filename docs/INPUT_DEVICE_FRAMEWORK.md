@@ -1,6 +1,6 @@
 # Input Device Framework
 
-This backend framework is the stable contract for configurable form input sources. The admin UI manages registered sources, and registered camera phones are now authenticated when submitting scans into an active temporary desktop session. Form-level input policies are still not implemented.
+This backend framework is the stable contract for configurable form input sources. The admin UI manages registered sources, and registered camera phones are authenticated when submitting scans into an active temporary desktop session. Persisted form-level source policies are available through the API; wiring them into every form and exposing the policy editor in the UI remain tracked work.
 
 ## Provider extension
 
@@ -28,10 +28,19 @@ Initial providers:
 
 H2 migration `V8` and MySQL migration `V7` create the device registry and append-only application audit table. All management routes require `ADMIN`; heartbeat is the only unauthenticated route and can only prove possession of its high-entropy device token. Existing expiring phone scanner sessions remain compatible.
 
+H2 migration `V9` and MySQL migration `V8` create `input_form_policy`. Policy endpoints:
+
+- `GET /api/input-policies/{formKey}?station={station}` resolves the effective policy for the authenticated librarian/admin.
+- `PUT /api/input-policies/{formKey}` saves that caller's personal policy; `station` is optional in the JSON body.
+- `GET/PUT /api/admin/input-policies/{formKey}` read or write a global default (omit `ownerUsername`) or a policy targeted to an existing staff username (provide `ownerUsername`). Admin-only routes cannot be called by librarians.
+- The response includes the selected scope, allowed source keys, default, update metadata, and optimistic version. Device keys use `DEVICE:{id}` and are validated for availability, ownership, and station compatibility before saving.
+- Resolution order is personal station override, personal default, global station override, global default, then system `MANUAL` fallback. Personal writes cannot set another owner; admin-targeted users are resolved case-insensitively to the canonical staff username.
+- `allowedSources` must be nonempty, unique, contain only registered provider keys or valid available device keys, and include `defaultSource`. Form keys are lowercase letters/digits/hyphens, max 64 characters.
+
 ## Boundaries still to implement
 
 - Surface phone registration/last-seen health in the admin UI; add physical camera permission/torch/scan testing on real phones.
-- Per-form/per-user/per-station source policy and fallback behavior.
+- Frontend integration and configuration UI for the new per-form/per-user/per-station policy API; backend fallback resolution and validation are implemented and covered by H2 integration tests.
 - Per-form device selection and configuration beyond the existing book-entry choices (manual, HID, camera, and temporary phone session).
 - Device scan submission/queue endpoints and rate controls for any future persistent scan API.
 - Live USB/Bluetooth/Wi-Fi HID hardware tests, MySQL migration execution, HTTPS camera tests, and multi-instance storage/health behavior.

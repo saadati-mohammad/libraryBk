@@ -94,6 +94,7 @@ public class SecurityConfig {
                         // WebSocket handshake (STOMP CONNECT carries its own identity).
                         .requestMatchers("/ws-chat/**").permitAll()
                         .requestMatchers("/api/account/**").hasRole("MEMBER")
+                        .requestMatchers("/api/input-policies/**").hasAnyRole("ADMIN", "LIBRARIAN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Global storage statistics are operational data, not a member message resource.
                         .requestMatchers("/api/v1/files/stats").hasAnyRole("ADMIN", "LIBRARIAN")
