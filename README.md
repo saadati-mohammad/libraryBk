@@ -15,6 +15,7 @@ file attachments, and Excel import.
 | Auditing | Hibernate Envers |
 | API docs | springdoc-openapi 3.1.1 (Swagger UI at `/swagger-ui.html`) |
 | Build | Maven (`./mvnw`) |
+| Tests | JUnit 5, Spring Boot integration tests, and H2 |
 
 ## Prerequisites
 
@@ -89,6 +90,7 @@ Profiles:
 
 Integration tests boot the real context against an in-memory H2 database with the same
 Flyway migrations the application uses (`src/test/resources/application-test.properties`).
+The suite also covers metadata provider mapping and the short-lived phone scanner relay.
 
 ## Authentication
 
@@ -118,6 +120,30 @@ curl -s http://localhost:8079/api/dashboard/summary -H "Authorization: Bearer <t
 Credentials are supplied via `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD`, BCrypt-hashed in
 memory at startup and never persisted. In the `production` profile these (and `JWT_SECRET`)
 have **no default** — the application refuses to start if they are unset.
+
+## Book metadata and phone scanner APIs
+
+Staff can search book metadata by ISBN or by title/author through the configured Open
+Library and Google Books endpoints. Results are merged and deduplicated on a best-effort
+basis; provider catalogs may be unavailable or incomplete. Configure the provider base URLs
+and optional Google Books key with `OPEN_LIBRARY_BASE_URL`, `GOOGLE_BOOKS_BASE_URL`, and
+`GOOGLE_BOOKS_API_KEY`.
+
+The desktop scanner-session endpoints require staff authentication:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/book/scanner-sessions` | Create a temporary phone pairing session |
+| `GET` | `/api/book/scanner-sessions/{id}/scans?afterSequence=0` | Poll scans waiting for the desktop form |
+| `DELETE` | `/api/book/scanner-sessions/{id}` | Close a session |
+
+The phone submits a valid ISBN to `POST /api/phone-scanner/sessions/{id}/scans` using the
+session pairing token. This endpoint is public only in the sense that the phone does not
+need a staff JWT: the random, high-entropy token authorizes that single short-lived session.
+Sessions expire after 10 minutes, keep a bounded in-memory scan queue, suppress rapid
+duplicate reads, and are invalidated when the service restarts. Do not log or share the
+pairing URL. The phone PWA camera requires HTTPS; keyboard-emulating USB/Bluetooth scanners
+can enter ISBNs without camera permission.
 
 ## Notes on behaviour preserved from earlier versions
 
