@@ -39,7 +39,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | T-016 | UI | Implement justified access-control/security center and effective-permission UX | TODO | Avoid displaying unimplemented security controls; backend remains authoritative |
 | T-017 | both | Evaluate performance, data integrity, observability, accessibility, Persian/RTL, imports, backups and deployment workflow | TODO | Implement measurable useful work; record justified exclusions |
 | T-018 | both | Run final builds, lint, unit/integration/E2E, scenario walkthrough and update docs/changelog/handoff | TODO | Capture exact evidence and limitations |
-| T-019 | both | Push each atomic task-group commit and open coordinated GitHub PRs | TODO | No force push; do not merge without authority and green CI |
+| T-019 | both | Push each atomic task-group commit and open coordinated GitHub PRs | TODO | No force push; user authorized merge at the end only if all checks are green; preserve API-first merge order |
 | T-020 | API | Add safe login and reset-request throttling | IN-PROGRESS | Per-IP in-process throttle is implemented and unit-tested; E2E uses an explicit 1000-request test ceiling. Production remains default 20/15m and reset 5/hour; shared storage, account bucket and trusted-proxy resolution remain |
 | T-021 | API | Revoke issued credentials after password reset | DONE | Additive `auth_version` migration for staff/member; JWT version checked per request; password-reset integration test proves old token returns 401; API clean verify 158 tests green |
 | T-022 | API | Fail closed for unowned attachment access and invalid message association | DONE | API now requires an active message for upload, denies missing/orphan ownership; `mvnw.cmd -B clean verify` passed 154 tests incl. orphan info/delete denial and upload-without-message rejection (2026-10-11) |
@@ -59,7 +59,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | T-036 | API | Use explicit business timezone and injectable clock for circulation | TODO | Boundary tests; preserve existing behavior in configured default zone |
 | T-037 | both | Document metadata-source coverage and regional provider extension | TODO | Do not claim exhaustive world coverage; record source attribution and gaps |
 | T-040 | both | Audit component/service size, repeated patterns, modularity and testability; refactor hot spots and add enforceable maintainability checks | IN-PROGRESS | UI `BookComponent` reduced from 928 to 858 TS lines by extracting editor/filter forms into `BookFormFactory`; new factory tests cover shared validators/defaults. Existing `PagedFilterPage` already centralizes list/filter behavior across three screens. UI lint/typecheck/production build, 160 unit tests and 74 headed Playwright cases (73 pass/1 expected viewport-conditional skip) green after extraction. UI still has 522/480/352-line reservation/person/loan components; API largest files are `FileService` 416, `GlobalExceptionHandler` 410, `WebSocketController` 397, `MessageService` 393. More responsibility extraction, repeat-pattern review and maintainability gates remain. |
-| T-041 | UI | Repair full-stack CI integration environment and coordinate API branch | IN-PROGRESS | UI CI now sets isolated login/reset throttling ceilings for serial E2E and checks out `libraryBk:feature/system-overhaul`; verified same configuration with the complete 76-case desktop/mobile Playwright run (75 pass, one viewport-conditional skip) and headed device flow. API workflow uses Java 21/setup-java v6. Need observe GitHub Actions on PR; `gh` CLI is unavailable here. |
+| T-041 | both | Repair CI setup, trigger feature-branch checks and coordinate API contract branch | IN-PROGRESS | UI CI sets isolated E2E throttling ceilings, checks out `libraryBk:feature/system-overhaul`, and is being enabled for push checks on that feature branch. UI/API local full suites pass (UI 162 unit + 76 Playwright: 75 pass/1 viewport skip; API 161 H2 tests). API workflow uses Java 21/setup-java v6. Need observe actual GitHub Actions runs after workflow push; old failed run records are historical and cannot be rewritten. |
 
 ## Decisions
 
@@ -82,6 +82,7 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 - Competitor feature depth and regional product details require current sourced research; marketing pages alone may not establish actual behavior.
 - Opening PRs is possible after all changes are committed/pushed; merging is explicitly not assumed.
 - Auth throttling is currently in-process and keys off servlet `remoteAddr`; behind a reverse proxy, configure trusted client-IP resolution before treating per-client limits as effective across production traffic. Multiple replicas need shared storage.
+- GitHub Actions failures already created on `master` are immutable run history; the fix is verified locally and new feature-branch runs must pass to prove the corrected workflows.
 
 ## Next action
 
