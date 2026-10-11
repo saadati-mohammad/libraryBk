@@ -25,6 +25,27 @@ class PublicCatalogIntegrationTest {
     @Autowired BookRepository books;
 
     @Test
+    void publicSearchNormalizesArabicLettersZeroWidthCharactersAndPersianDigits() throws Exception {
+        String suffix = Long.toString(System.nanoTime());
+        Book saved = books.saveAndFlush(Book.builder()
+                .title("کتاب‌خانه‌ی كودک ۱۲۳ " + suffix)
+                .author("نویسنده")
+                .isbn10("1234567890")
+                .subject("کتابخانه")
+                .active(true)
+                .copyCount(1)
+                .build());
+
+        JsonNode result = mapper.readTree(mockMvc.perform(get("/api/public/books")
+                        .param("q", "\u06a9\u062a\u0627\u0628\u062e\u0627\u0646\u0647\u200c\u064a \u0643\u0648\u062f\u06a9 ١٢٣ " + suffix)
+                        .param("subject", "کتابخانه"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+
+        assertThat(result.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(result.path("content").get(0).path("id").asLong()).isEqualTo(saved.getId());
+    }
+
+    @Test
     void publicSearchAndDetailsExposeOnlyActivePublicFieldsWithoutAuthentication() throws Exception {
         String suffix = Long.toString(System.nanoTime());
         Book active = books.saveAndFlush(Book.builder()

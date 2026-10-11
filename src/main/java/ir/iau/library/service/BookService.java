@@ -5,6 +5,7 @@ import ir.iau.library.dto.PublicCategoryDto;
 import ir.iau.library.entity.Book;
 import ir.iau.library.repository.BookRepository;
 import ir.iau.library.specification.BookSpecification;
+import ir.iau.library.util.PersianSearchNormalizer;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,23 +33,23 @@ public class BookService {
 
     /** Public search over safe discovery fields. Internal shelf/location fields are never filters here. */
     public Page<Book> findPublic(String query, String subject, Pageable pageable) {
-        String term = query == null ? "" : query.strip().toLowerCase();
-        String category = subject == null ? "" : subject.strip().toLowerCase();
+        String term = PersianSearchNormalizer.normalize(query);
+        String category = PersianSearchNormalizer.normalize(subject);
         Specification<Book> spec = (root, criteria, cb) -> {
             Predicate active = cb.isTrue(root.get("active"));
             Predicate search = cb.conjunction();
             if (!term.isBlank()) {
                 String pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
                 search = cb.or(
-                        cb.like(cb.lower(root.get("title")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("author")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("publisher")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("subject")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("isbn10")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("isbn13")), pattern, '\\'));
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("title")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("author")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("publisher")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("subject")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("isbn10")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("isbn13")), pattern, '\\'));
             }
             Predicate categoryFilter = category.isBlank() ? cb.conjunction()
-                    : cb.equal(cb.lower(root.get("subject")), category);
+                    : cb.equal(PersianSearchNormalizer.normalize(cb, root.get("subject")), category);
             return cb.and(active, search, categoryFilter);
         };
         return bookRepository.findAll(spec, pageable);
