@@ -74,7 +74,9 @@ Status values: `TODO`, `IN-PROGRESS`, `DONE`, `OUT-OF-SCOPE` (with reason). Do n
 | Migrate existing aggregate book counts into explicit copies only after inspecting legacy loans and defining reconciliation | Inventing per-copy loan allocation risks corrupting circulation history. |
 | Keep production auth throttles strict, but raise the ceiling only in the serial CI browser job | Browser scenarios share one seeded account and loopback IP; they otherwise exhaust the production limit and make unrelated tests fail. A direct 22-request probe confirmed the isolated CI ceiling prevents false 429s. |
 
-## Known risks / constraints`r`n`r`n- Concurrent imports across multiple API instances can race because catalog ISBN uniqueness is not database-enforced yet; adding safe unique constraints requires a legacy duplicate reconciliation/backfill policy. Current import prevents duplicates within one request and against records visible at query time.
+## Known risks / constraints
+
+- Concurrent imports across multiple API instances can race because catalog ISBN uniqueness is not database-enforced yet; adding safe unique constraints requires a legacy duplicate reconciliation/backfill policy. Current import prevents duplicates within one request and against records visible at query time.
 
 - No backend lint plugin or lint command is configured in `pom.xml`; use compile/test and consider adding an agreed static-analysis gate after Phase 1.
 - The requested scope spans an entire library platform and cannot be declared complete merely by producing documents; each claim needs implementation evidence.
