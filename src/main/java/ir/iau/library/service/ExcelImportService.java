@@ -113,7 +113,13 @@ public class ExcelImportService {
                 bookDto.setPositionNote(getCellValueAsString(row.getCell(21), dataFormatter));
 
                 bookDtos.add(bookDto);
-                booksToSave.add(new Book(bookDto));
+                Book book = new Book(bookDto);
+                try {
+                    BookService.normalizeBookIsbns(book);
+                } catch (IllegalArgumentException exception) {
+                    throw new IllegalArgumentException("ردیف " + (row.getRowNum() + 1) + ": " + exception.getMessage(), exception);
+                }
+                booksToSave.add(book);
             }
         }
 

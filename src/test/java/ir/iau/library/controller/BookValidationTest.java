@@ -69,7 +69,7 @@ class BookValidationTest {
     @Test
     void negativePageCountReturns400() throws Exception {
         String token = login();
-        String json = "{\"title\":\"T\",\"author\":\"A\",\"isbn10\":\"964-1-0000000001\","
+        String json = "{\"title\":\"T\",\"author\":\"A\",\"isbn10\":\"0-306-40615-2\","
                 + "\"subject\":\"S\",\"pageCount\":-5}";
 
         mockMvc.perform(multipart("/api/book")
@@ -82,7 +82,7 @@ class BookValidationTest {
     void validBookIsCreated() throws Exception {
         String token = login();
         String json = "{\"title\":\"Valid Book\",\"author\":\"Author\","
-                + "\"isbn10\":\"964-1-0000000002\",\"subject\":\"Subject\","
+                + "\"isbn10\":\"0-306-40615-2\",\"subject\":\"Subject\","
                 + "\"copyCount\":1,\"active\":true}";
 
         MvcResult res = mockMvc.perform(multipart("/api/book")
@@ -94,6 +94,7 @@ class BookValidationTest {
         JsonNode body = objectMapper.readTree(res.getResponse().getContentAsString());
         assertThat(body.get("id").asLong()).isPositive();
         assertThat(body.get("title").asText()).isEqualTo("Valid Book");
+        assertThat(body.get("isbn10").asText()).isEqualTo("0306406152");
     }
 
     @Test
@@ -111,5 +112,35 @@ class BookValidationTest {
         JsonNode body = objectMapper.readTree(res.getResponse().getContentAsString());
         assertThat(body.get("isbn13").asText()).isEqualTo("9780306406157");
         assertThat(body.has("isbnIdentifierPresent")).isFalse();
+    }
+
+    @Test
+    void invalidIsbnChecksumIsRejected() throws Exception {
+        String token = login();
+        String json = "{\"title\":\"Invalid ISBN\",\"author\":\"Author\","
+                + "\"isbn13\":\"9780306406158\",\"subject\":\"Subject\"}";
+
+        MvcResult result = mockMvc.perform(multipart("/api/book")
+                        .file(bookPart(json))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+        assertThat(objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText())
+                .contains("isbnIdentifierValid");
+    }
+
+    @Test
+    void persianDigitsAndSeparatorsAreCanonicalized() throws Exception {
+        String token = login();
+        String json = "{\"title\":\"Persian ISBN\",\"author\":\"Author\","
+                + "\"isbn13\":\"۹۷۸-۰۳۰۶۴۰۶۱۵۷\",\"subject\":\"Subject\"}";
+
+        MvcResult result = mockMvc.perform(multipart("/api/book")
+                        .file(bookPart(json))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andReturn();
+        assertThat(objectMapper.readTree(result.getResponse().getContentAsString()).get("isbn13").asText())
+                .isEqualTo("9780306406157");
     }
 }

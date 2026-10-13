@@ -1,6 +1,6 @@
 # Input Device Framework
 
-This backend framework is the stable contract for configurable form input sources. The admin UI manages registered sources, and registered camera phones are authenticated when submitting scans into an active temporary desktop session. Persisted form-level source policies are available through the API; wiring them into every form and exposing the policy editor in the UI remain tracked work.
+This backend framework is the stable contract for configurable form input sources. The admin UI manages registered sources and persisted form-level policies; book registration currently consumes the resolved policy, while wiring other forms remains tracked. Registered camera phones are authenticated when submitting scans into an active temporary desktop session.
 
 ## Provider extension
 
@@ -46,3 +46,7 @@ H2 migration `V9` and MySQL migration `V8` create `input_form_policy`. Policy en
 - Live USB/Bluetooth/Wi-Fi HID hardware tests, MySQL migration execution, HTTPS camera tests, and multi-instance storage/health behavior.
 
 Phone registration is persistent and revocable; scan sessions themselves remain short-lived (10 minutes) and in-memory. On multi-instance deployments the active session must reach the same backend instance until shared session storage is added.
+
+## Catalog barcode contract
+
+Book create/update requests and workbook import validate ISBN-10/13 check digits and store canonical values. ASCII spaces/hyphens are removed, Persian and Arabic-Indic digits map to ASCII, and invalid check digits return a validation error. The UI scanner/manual utility applies the same digit normalization before lookup/submission. No unique ISBN constraint is imposed yet; duplicate-aware catalog decisions remain a separate task.

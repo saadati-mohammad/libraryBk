@@ -111,14 +111,14 @@ class DashboardSummaryTest {
                 .build());
 
         Book activeBook = bookRepository.save(Book.builder()
-                .title("Dashboard Book A").author("Author").isbn10("dash-a-" + suffix)
+                .title("Dashboard Book A").author("Author").isbn10("0306406152")
                 .subject("Subject").copyCount(1).active(true).build());
         Book secondBook = bookRepository.save(Book.builder()
-                .title("Dashboard Book B").author("Author").isbn10("dash-b-" + suffix)
+                .title("Dashboard Book B").author("Author").isbn10("0306406152")
                 .subject("Subject").copyCount(1).active(true).build());
         // Soft-deleted book: must not be counted.
         bookRepository.save(Book.builder()
-                .title("Dashboard Book Deleted").author("Author").isbn10("dash-c-" + suffix)
+                .title("Dashboard Book Deleted").author("Author").isbn10("0306406152")
                 .subject("Subject").copyCount(1).active(false).build());
 
         BookLoan onLoan = bookLoanRepository.save(BookLoan.builder()

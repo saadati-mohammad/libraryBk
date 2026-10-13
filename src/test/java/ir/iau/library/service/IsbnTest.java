@@ -18,4 +18,11 @@ class IsbnTest {
         assertThat(Isbn.isValid("9780306406158")).isFalse();
         assertThat(Isbn.isValid("1234567890123")).isFalse();
     }
+
+    @Test
+    void normalizesPersianAndArabicIndicDigitsBeforeValidation() {
+        assertThat(Isbn.normalize("۹۷۸-۰۳۰۶۴۰۶۱۵۷")).isEqualTo("9780306406157");
+        assertThat(Isbn.normalize("٩٧٨ ٠٣٠٦٤٠٦١٥٧")).isEqualTo("9780306406157");
+        assertThat(Isbn.isValid("۹۷۸-۰۳۰۶۴۰۶۱۵۷")).isTrue();
+    }
 }

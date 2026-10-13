@@ -82,7 +82,7 @@ class BookActiveDefaultIntegrationTest {
     @Test
     void bookCreatedWithoutTheActiveFlagIsActiveListedAndLendable() throws Exception {
         String token = login();
-        String isbn = "active-" + UUID.randomUUID().toString().substring(0, 8);
+        String isbn = "0306406152";
 
         // 1. create with NO "active" field at all
         MvcResult created = mockMvc.perform(multipart("/api/book")
@@ -122,7 +122,7 @@ class BookActiveDefaultIntegrationTest {
     @Test
     void updatingABookWithoutTheActiveFlagKeepsItActive() throws Exception {
         String token = login();
-        String isbn = "keepactive-" + UUID.randomUUID().toString().substring(0, 8);
+        String isbn = "0306406152";
         long bookId = createBook(token, "{\"title\":\"Keep Active\",\"author\":\"Author\","
                 + "\"isbn10\":\"" + isbn + "\",\"subject\":\"Subject\",\"active\":true}");
 

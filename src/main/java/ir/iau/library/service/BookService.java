@@ -67,6 +67,7 @@ public class BookService {
         // back-reference collection are always server-controlled.
         book.setId(null);
         book.setLoans(null);
+        normalizeBookIsbns(book);
         // A book created without an explicit flag is an ACTIVE book. A null flag used to be
         // persisted verbatim, which made the record invisible to ?active=true listings,
         // uncounted on the dashboard and impossible to lend or reserve (the business guards
@@ -91,6 +92,7 @@ public class BookService {
         book.setPublisher(bookDetails.getPublisher());
         book.setIsbn10(bookDetails.getIsbn10());
         book.setIsbn13(bookDetails.getIsbn13());
+        normalizeBookIsbns(book);
         book.setDescription(bookDetails.getDescription()); // اضافه شده
         book.setDeweyDecimal(bookDetails.getDeweyDecimal());
         book.setCongressClassification(bookDetails.getCongressClassification());
@@ -159,5 +161,19 @@ public class BookService {
         return bookRepository.findById(id)
                 .map(Book::getBookCoverFile)
                 .filter(bytes -> bytes != null && bytes.length > 0);
+    }
+
+    /** Canonicalize identifiers on every catalog write so search, deduplication and scanner paths agree. */
+    public static void normalizeBookIsbns(Book book) {
+        String isbn10 = Isbn.normalize(book.getIsbn10());
+        String isbn13 = Isbn.normalize(book.getIsbn13());
+        if (!isbn10.isEmpty() && !Isbn.isValid(isbn10)) {
+            throw new IllegalArgumentException("شابک ۱۰ رقمی معتبر نیست");
+        }
+        if (!isbn13.isEmpty() && !Isbn.isValid(isbn13)) {
+            throw new IllegalArgumentException("شابک ۱۳ رقمی معتبر نیست");
+        }
+        book.setIsbn10(isbn10.isEmpty() ? null : isbn10);
+        book.setIsbn13(isbn13.isEmpty() ? null : isbn13);
     }
 }

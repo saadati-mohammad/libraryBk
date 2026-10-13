@@ -30,7 +30,7 @@ class PublicCatalogIntegrationTest {
         Book saved = books.saveAndFlush(Book.builder()
                 .title("کتاب‌خانه‌ی كودک ۱۲۳ " + suffix)
                 .author("نویسنده")
-                .isbn10("1234567890")
+                .isbn10("0306406152")
                 .subject("کتابخانه")
                 .active(true)
                 .copyCount(1)
@@ -49,11 +49,11 @@ class PublicCatalogIntegrationTest {
     void publicSearchAndDetailsExposeOnlyActivePublicFieldsWithoutAuthentication() throws Exception {
         String suffix = Long.toString(System.nanoTime());
         Book active = books.saveAndFlush(Book.builder()
-                .title("Public Discovery " + suffix).author("A. Writer").isbn10("pub" + suffix)
+                .title("Public Discovery " + suffix).author("A. Writer").isbn10("0306406152")
                 .subject("Public Category").active(true).copyCount(2)
                 .shelfCode("STAFF-SHELF").positionNote("PRIVATE LOCATION").build());
         Book inactive = books.saveAndFlush(Book.builder()
-                .title("Hidden Discovery " + suffix).author("A. Writer").isbn10("hid" + suffix)
+                .title("Hidden Discovery " + suffix).author("A. Writer").isbn10("0306406152")
                 .subject("Hidden Category").active(false).copyCount(1).build());
 
         JsonNode result = mapper.readTree(mockMvc.perform(get("/api/public/books")

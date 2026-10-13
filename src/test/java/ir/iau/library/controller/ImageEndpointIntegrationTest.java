@@ -70,8 +70,7 @@ class ImageEndpointIntegrationTest {
 
     private long createBookWithCover(String token, byte[] cover) throws Exception {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
-        String json = "{\"title\":\"Covered\",\"author\":\"Author\",\"isbn10\":\"cov-" + suffix
-                + "\",\"subject\":\"Subject\"}";
+        String json = "{\"title\":\"Covered\",\"author\":\"Author\",\"isbn10\":\"0306406152\",\"subject\":\"Subject\"}";
         MvcResult res = mockMvc.perform(multipart("/api/book")
                         .file(jsonPart("book", json))
                         .file(new MockMultipartFile("bookCoverFile", "cover.png", "image/png", cover))
@@ -101,8 +100,7 @@ class ImageEndpointIntegrationTest {
         String token = login();
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         MvcResult created = mockMvc.perform(multipart("/api/book")
-                        .file(jsonPart("book", "{\"title\":\"No Cover\",\"author\":\"Author\",\"isbn10\":\"nc-"
-                                + suffix + "\",\"subject\":\"Subject\"}"))
+                        .file(jsonPart("book", "{\"title\":\"No Cover\",\"author\":\"Author\",\"isbn10\":\"0306406152\",\"subject\":\"Subject\"}"))
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated())
                 .andReturn();

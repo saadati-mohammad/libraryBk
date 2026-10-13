@@ -5,7 +5,19 @@ public final class Isbn {
     private Isbn() { }
 
     public static String normalize(String input) {
-        return input == null ? "" : input.replaceAll("[\\s-]", "").toUpperCase();
+        if (input == null) return "";
+        StringBuilder normalized = new StringBuilder(input.length());
+        input.codePoints().forEach(codePoint -> {
+            if (Character.isWhitespace(codePoint) || codePoint == '-') return;
+            if (codePoint >= 0x06f0 && codePoint <= 0x06f9) {
+                normalized.append((char) ('0' + codePoint - 0x06f0));
+            } else if (codePoint >= 0x0660 && codePoint <= 0x0669) {
+                normalized.append((char) ('0' + codePoint - 0x0660));
+            } else {
+                normalized.appendCodePoint(codePoint);
+            }
+        });
+        return normalized.toString().toUpperCase(java.util.Locale.ROOT);
     }
 
     public static boolean isValid(String input) {
