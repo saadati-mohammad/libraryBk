@@ -21,6 +21,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.Clock;
 import java.util.List;
 
 @Service
@@ -32,6 +33,7 @@ public class BookLoanService {
     private BookLoanRepository loanRepository;
     @Autowired private PersonRepository personRepository;
     @Autowired private BookRepository bookRepository;
+    @Autowired private Clock clock = Clock.systemDefaultZone();
 
     private static final int LOAN_DURATION_DAYS = 14;
 
@@ -66,8 +68,8 @@ public class BookLoanService {
         BookLoan newLoan = BookLoan.builder()
                 .person(person)
                 .book(book)
-                .loanDate(LocalDate.now())
-                .dueDate(LocalDate.now().plusDays(LOAN_DURATION_DAYS))
+                .loanDate(LocalDate.now(clock))
+                .dueDate(LocalDate.now(clock).plusDays(LOAN_DURATION_DAYS))
                 .status(LoanStatus.ON_LOAN)
                 .notes(request.getNotes())
                 .build();
@@ -84,7 +86,7 @@ public class BookLoanService {
         }
 
         loan.setStatus(LoanStatus.RETURNED);
-        loan.setReturnDate(LocalDate.now());
+        loan.setReturnDate(LocalDate.now(clock));
 
         return convertToDto(loanRepository.save(loan));
     }
@@ -102,7 +104,7 @@ public class BookLoanService {
      * already treats {@code ON_LOAN} and {@code OVERDUE} alike.
      */
     public int markOverdueLoans() {
-        List<BookLoan> overdue = loanRepository.findByStatusAndDueDateBefore(LoanStatus.ON_LOAN, LocalDate.now());
+        List<BookLoan> overdue = loanRepository.findByStatusAndDueDateBefore(LoanStatus.ON_LOAN, LocalDate.now(clock));
         overdue.forEach(loan -> loan.setStatus(LoanStatus.OVERDUE));
         loanRepository.saveAll(overdue);
         return overdue.size();

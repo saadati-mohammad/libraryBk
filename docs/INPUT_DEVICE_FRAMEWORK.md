@@ -50,3 +50,7 @@ Phone registration is persistent and revocable; scan sessions themselves remain 
 ## Catalog barcode contract
 
 Book create/update requests and workbook import validate ISBN-10/13 check digits and store canonical values. ASCII spaces/hyphens are removed, Persian and Arabic-Indic digits map to ASCII, and invalid check digits return a validation error. The UI scanner/manual utility applies the same digit normalization before lookup/submission. No unique ISBN constraint is imposed yet; duplicate-aware catalog decisions remain a separate task.
+
+## Business date timezone
+
+Circulation business dates use an injectable Java Clock. Set APP_BUSINESS_ZONE to an IANA zone such as Asia/Tehran to make loan, return, reservation, and overdue boundaries consistent. If blank, the JVM host zone is used to preserve existing behavior. Tests use a fixed clock at the Tehran midnight boundary.

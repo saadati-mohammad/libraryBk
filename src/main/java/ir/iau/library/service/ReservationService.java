@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDate;
+import java.time.Clock;
 import java.util.List;
 
 @Service
@@ -29,6 +30,8 @@ public class ReservationService {
     private final PersonRepository personRepository;
     private final BookRepository bookRepository;
     private final BookLoanService bookLoanService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private Clock clock = Clock.systemDefaultZone();
 
     public Reservation createReservation(Long personId, Long bookId, LocalDate expiryDate) {
         Person person = personRepository.findById(personId)
@@ -37,7 +40,7 @@ public class ReservationService {
         Book book = bookRepository.findByIdForUpdate(bookId)
                 .orElseThrow(() -> new EntityNotFoundException("Book not found"));
 
-        if (expiryDate != null && expiryDate.isBefore(LocalDate.now())) {
+        if (expiryDate != null && expiryDate.isBefore(LocalDate.now(clock))) {
             throw new IllegalArgumentException("expiryDate cannot be in the past");
         }
 
@@ -58,7 +61,7 @@ public class ReservationService {
         Reservation reservation = Reservation.builder()
                 .person(person)
                 .book(book)
-                .reservationDate(LocalDate.now())
+                .reservationDate(LocalDate.now(clock))
                 .expiryDate(expiryDate)
                 .status(ReservationStatus.ACTIVE)
                 .build();
@@ -116,7 +119,7 @@ public class ReservationService {
     }
 
     public List<Reservation> expireOverdueReservations() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         List<Reservation> toExpire = reservationRepository.findByExpiryDateBeforeAndStatus(today, ReservationStatus.ACTIVE);
         toExpire.forEach(r -> r.setStatus(ReservationStatus.EXPIRED));
         return reservationRepository.saveAll(toExpire);
