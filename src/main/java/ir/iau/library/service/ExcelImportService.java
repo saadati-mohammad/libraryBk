@@ -3,6 +3,7 @@ package ir.iau.library.service;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import ir.iau.library.dto.BookFilterDto;
 import ir.iau.library.dto.BookImportResult;
+import ir.iau.library.dto.BookImportRowIssue;
 import ir.iau.library.dto.PersonFilterDto;
 import ir.iau.library.entity.Book;
 import ir.iau.library.entity.Person;
@@ -10,6 +11,9 @@ import ir.iau.library.repository.BookRepository;
 import ir.iau.library.repository.PersonRepository;
 import ir.iau.library.specification.DuplicateFieldException;
 import jakarta.transaction.Transactional;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,32 +33,52 @@ import java.util.Set;
 
 @Service
 public class ExcelImportService {
+    private static final Validator FALLBACK_VALIDATOR = Validation.buildDefaultValidatorFactory().getValidator();
 
     private final BookRepository bookRepository;
     private final PersonRepository personRepository;
     private final long maxImportFileBytes;
     private final int maxImportRows;
+    private final Validator validator;
 
     @Autowired
     public ExcelImportService(BookRepository bookRepository, PersonRepository personRepository,
+                              Validator validator,
                               @Value("${app.upload.max-file-size:10485760}") long maxImportFileBytes,
                               @Value("${app.import.max-rows:5000}") int maxImportRows) {
         this.bookRepository = bookRepository;
         this.personRepository = personRepository;
+        this.validator = validator;
         this.maxImportFileBytes = maxImportFileBytes;
         this.maxImportRows = maxImportRows;
     }
 
     /** Test and non-Spring construction keeps the documented safe defaults. */
     public ExcelImportService(BookRepository bookRepository, PersonRepository personRepository) {
-        this(bookRepository, personRepository, 10L * 1024 * 1024, 5000);
+        this(bookRepository, personRepository, FALLBACK_VALIDATOR, 10L * 1024 * 1024, 5000);
+    }
+
+    public ExcelImportService(BookRepository bookRepository, PersonRepository personRepository,
+                              long maxImportFileBytes, int maxImportRows) {
+        this(bookRepository, personRepository, FALLBACK_VALIDATOR, maxImportFileBytes, maxImportRows);
     }
 
     // متد اصلی برای خواندن فایل اکسل
     @Transactional // عملیات ذخیره را در یک تراکنش قرار می‌دهد
     public BookImportResult importBooksFromExcel(MultipartFile file) throws IOException {
+        return processBookImport(file, true);
+    }
+
+    @Transactional
+    public BookImportResult previewBooksFromExcel(MultipartFile file) throws IOException {
+        return processBookImport(file, false);
+    }
+
+    private BookImportResult processBookImport(MultipartFile file, boolean persist) throws IOException {
         validateImportFile(file);
         List<ImportBookRow> importRows = new ArrayList<>();
+        List<BookImportRowIssue> invalidRows = new ArrayList<>();
+        int totalRows = 0;
         DataFormatter dataFormatter = new DataFormatter(); // برای تبدیل انواع داده به رشته
 
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
@@ -75,8 +99,10 @@ public class ExcelImportService {
                 if (isRowEmpty(row)) {
                     continue;
                 }
+                totalRows++;
 
                 BookFilterDto bookDto = new BookFilterDto();
+                List<String> rowErrors = new ArrayList<>();
 
                 // خواندن داده‌ها با استفاده از متد کمکی امن
                 bookDto.setIsbn10(getCellValueAsString(row.getCell(0), dataFormatter));
@@ -98,15 +124,15 @@ public class ExcelImportService {
                         // فرمت‌های مختلف تاریخ را امتحان کنید
                         bookDto.setPublicationDate(LocalDate.parse(publicationDateStr, DateTimeFormatter.ISO_LOCAL_DATE)); // YYYY-MM-DD
                     } catch (Exception e) {
-                        // اینجا می‌توانید لاگ بزنید یا فرمت دیگری را امتحان کنید
-                        System.err.println("Could not parse date: " + publicationDateStr + " at row " + row.getRowNum());
+                        rowErrors.add("تاریخ انتشار باید با قالب YYYY-MM-DD وارد شود");
                     }
                 }
 
                 String pageCountStr = getCellValueAsString(row.getCell(12), dataFormatter);
-                Integer pageCount = parseIntegerCell(pageCountStr, row.getRowNum(), "pageCount");
-                if (pageCount != null) {
-                    bookDto.setPageCount(pageCount);
+                try {
+                    bookDto.setPageCount(parseIntegerCell(pageCountStr, "pageCount"));
+                } catch (IllegalArgumentException exception) {
+                    rowErrors.add(exception.getMessage());
                 }
 
                 bookDto.setLanguage(getCellValueAsString(row.getCell(13), dataFormatter));
@@ -117,11 +143,15 @@ public class ExcelImportService {
                 // is invisible to ?active=true listings, uncounted on the dashboard and refused
                 // by the loan/reservation guards — i.e. an imported but unusable record.
                 bookDto.setActive(isActiveCell(activeStr));
+                if (activeStr != null && !activeStr.isBlank() && !isValidActiveCell(activeStr)) {
+                    rowErrors.add("وضعیت باید TRUE/FALSE، فعال/غیرفعال یا ۱/۰ باشد");
+                }
 
                 String copyCountStr = getCellValueAsString(row.getCell(16), dataFormatter);
-                Integer copyCount = parseIntegerCell(copyCountStr, row.getRowNum(), "copyCount");
-                if (copyCount != null) {
-                    bookDto.setCopyCount(copyCount);
+                try {
+                    bookDto.setCopyCount(parseIntegerCell(copyCountStr, "copyCount"));
+                } catch (IllegalArgumentException exception) {
+                    rowErrors.add(exception.getMessage());
                 }
 
                 bookDto.setLibrarySection(getCellValueAsString(row.getCell(17), dataFormatter));
@@ -130,11 +160,25 @@ public class ExcelImportService {
                 bookDto.setColumnNumber(getCellValueAsString(row.getCell(20), dataFormatter));
                 bookDto.setPositionNote(getCellValueAsString(row.getCell(21), dataFormatter));
 
+                if (!rowErrors.isEmpty()) {
+                    invalidRows.add(new BookImportRowIssue(row.getRowNum() + 1,
+                            rowErrors.stream().distinct().collect(java.util.stream.Collectors.joining("؛ "))));
+                    continue;
+                }
+
                 Book book = new Book(bookDto);
                 try {
                     BookService.normalizeBookIsbns(book);
                 } catch (IllegalArgumentException exception) {
-                    throw new IllegalArgumentException("ردیف " + (row.getRowNum() + 1) + ": " + exception.getMessage(), exception);
+                    invalidRows.add(new BookImportRowIssue(row.getRowNum() + 1, exception.getMessage()));
+                    continue;
+                }
+                Set<ConstraintViolation<Book>> violations = validator.validate(book);
+                if (!violations.isEmpty()) {
+                    String reason = violations.stream().map(ConstraintViolation::getMessage).distinct()
+                            .sorted().collect(java.util.stream.Collectors.joining("؛ "));
+                    invalidRows.add(new BookImportRowIssue(row.getRowNum() + 1, reason));
+                    continue;
                 }
                 importRows.add(new ImportBookRow(row.getRowNum() + 1, book));
             }
@@ -171,11 +215,12 @@ public class ExcelImportService {
         }
 
         // Save non-duplicates in one batch. Existing records are never overwritten.
-        if (!booksToSave.isEmpty()) {
+        if (persist && !booksToSave.isEmpty()) {
             bookRepository.saveAll(booksToSave);
         }
 
-        return new BookImportResult(booksToSave.size(), duplicateRows);
+        return new BookImportResult(persist ? booksToSave.size() : 0, booksToSave.size(), totalRows,
+                duplicateRows, invalidRows);
     }
 
     private record ImportBookRow(int spreadsheetRow, Book book) { }
@@ -223,20 +268,21 @@ public class ExcelImportService {
         return dataFormatter.formatCellValue(cell).trim();
     }
 
-    /**
-     * تبدیل امن مقدار یک سلول به عدد صحیح.
-     * سلول خالی/غیرعددی مقدار null برمی‌گرداند (بدون پرتاب استثنا) تا یک سلول بدفرمت
-     * کل ایمپورت را متوقف نکند. مقدار اعشاری (مثل ۳۰۰.۰ از اکسل) به نزدیک‌ترین عدد صحیح گرد می‌شود.
-     */
-    private Integer parseIntegerCell(String value, int rowNum, String fieldName) {
+    /** Empty optional integer cells become null; malformed values become row-level validation errors. */
+    private Integer parseIntegerCell(String value, String fieldName) {
         if (value == null || value.isEmpty()) {
             return null;
         }
         try {
-            return (int) Double.parseDouble(value);
+            double parsed = Double.parseDouble(value);
+            if (!Double.isFinite(parsed) || parsed < Integer.MIN_VALUE || parsed > Integer.MAX_VALUE
+                    || parsed % 1 != 0) {
+                throw new NumberFormatException("Value is not a finite in-range integer");
+            }
+            return (int) parsed;
         } catch (NumberFormatException e) {
-            System.err.println("Could not parse " + fieldName + ": '" + value + "' at row " + rowNum);
-            return null;
+            String fieldNameFa = "pageCount".equals(fieldName) ? "تعداد صفحات" : "تعداد نسخه‌ها";
+            throw new IllegalArgumentException(fieldNameFa + " باید عدد صحیح باشد");
         }
     }
 
@@ -371,6 +417,11 @@ public class ExcelImportService {
             return true;
         }
         return rawValue.equalsIgnoreCase("TRUE") || rawValue.equals("فعال") || rawValue.equals("1");
+    }
+
+    private static boolean isValidActiveCell(String rawValue) {
+        return rawValue.equalsIgnoreCase("TRUE") || rawValue.equalsIgnoreCase("FALSE")
+                || rawValue.equals("فعال") || rawValue.equals("غیرفعال") || rawValue.equals("1") || rawValue.equals("0");
     }
 
 }

@@ -35,9 +35,13 @@ public class ExcelImportController {
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "imported", result.imported(),
+                    "eligible", result.eligible(),
+                    "totalRows", result.totalRows(),
                     "skippedDuplicates", result.skippedDuplicates(),
                     "duplicateRows", result.duplicateRows(),
-                    "message", "Books imported; duplicates were skipped without overwriting existing records."));
+                    "skippedInvalid", result.skippedInvalid(),
+                    "invalidRows", result.invalidRows(),
+                    "message", "Books imported; duplicate and invalid rows were skipped without overwriting existing records."));
         } catch (Exception e) {
             // Full detail stays in the server log; the client gets a generic message.
             log.error("Error importing books from Excel: {}", e.getMessage(), e);
@@ -45,6 +49,27 @@ public class ExcelImportController {
                     .body(Map.of(
                             "success", false,
                             "message", "Error importing books. Check the file format and try again."));
+        }
+    }
+
+    @PostMapping("/books/preview")
+    public ResponseEntity<Map<String, Object>> previewBooks(@RequestPart("file") MultipartFile file) {
+        try {
+            BookImportResult result = excelImportService.previewBooksFromExcel(file);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "preview", true,
+                    "totalRows", result.totalRows(),
+                    "eligible", result.eligible(),
+                    "skippedDuplicates", result.skippedDuplicates(),
+                    "duplicateRows", result.duplicateRows(),
+                    "skippedInvalid", result.skippedInvalid(),
+                    "invalidRows", result.invalidRows()));
+        } catch (Exception e) {
+            log.warn("Book import preview rejected: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                    .body(Map.of("success", false, "message", e.getMessage() == null
+                            ? "پیش‌نمایش فایل ممکن نشد؛ قالب و محدودیت‌های فایل را بررسی کنید." : e.getMessage()));
         }
     }
 

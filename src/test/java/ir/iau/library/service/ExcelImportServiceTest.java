@@ -62,6 +62,7 @@ class ExcelImportServiceTest {
                 header.createCell(i).setCellValue("col" + i);
             }
             Row row = sheet.createRow(1);
+            row.createCell(0).setCellValue("0-306-40615-2"); // valid ISBN-10
             row.createCell(1).setCellValue("عنوان تست");   // title
             row.createCell(2).setCellValue("نویسنده تست"); // author
             row.createCell(9).setCellValue("موضوع تست");   // subject
@@ -79,14 +80,15 @@ class ExcelImportServiceTest {
     }
 
     @Test
-    void importBooks_doesNotAbortOnNonNumericPageCount() throws Exception {
+    void importBooksReportsNonNumericCountsAsRowValidationErrors() throws Exception {
         MockMultipartFile file = xlsxWithRow("N/A", "not-a-number");
 
         var result = service.importBooksFromExcel(file);
 
-        // The row must still be imported; the bad numeric cells are skipped, not fatal.
-        assertThat(result.imported()).isEqualTo(1);
-        assertThat(result.skippedDuplicates()).isZero();
+        assertThat(result.imported()).isZero();
+        assertThat(result.skippedInvalid()).isEqualTo(1);
+        assertThat(result.invalidRows().get(0).row()).isEqualTo(2);
+        assertThat(result.invalidRows().get(0).reason()).contains("تعداد صفحات", "تعداد نسخه‌ها");
     }
 
     @Test
@@ -136,6 +138,17 @@ class ExcelImportServiceTest {
         ArgumentCaptor<List<Book>> captor = ArgumentCaptor.forClass(List.class);
         verify(bookRepository).saveAll(captor.capture());
         assertThat(captor.getValue()).hasSize(1);
+    }
+
+    @Test
+    void previewBooksReportsImportableAndDuplicateRowsWithoutPersisting() throws Exception {
+        var result = service.previewBooksFromExcel(xlsxWithIsbns("0-306-40615-2", "0306406152"));
+
+        assertThat(result.imported()).isZero();
+        assertThat(result.eligible()).isEqualTo(1);
+        assertThat(result.totalRows()).isEqualTo(2);
+        assertThat(result.duplicateRows()).containsExactly(3);
+        org.mockito.Mockito.verify(bookRepository, org.mockito.Mockito.never()).saveAll(org.mockito.ArgumentMatchers.anyList());
     }
 
     @Test

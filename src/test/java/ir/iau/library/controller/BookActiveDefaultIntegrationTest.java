@@ -200,11 +200,21 @@ class BookActiveDefaultIntegrationTest {
 
         MockMultipartFile file = new MockMultipartFile("file", "books.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", workbookBytes);
+        mockMvc.perform(multipart("/api/excel-import/books/preview").file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.preview").value(true))
+                .andExpect(jsonPath("$.totalRows").value(3))
+                .andExpect(jsonPath("$.eligible").value(1))
+                .andExpect(jsonPath("$.skippedDuplicates").value(2));
+        assertThat(bookRepository.findByIsbn13In(List.of("9781861972712"))).isEmpty();
+
         mockMvc.perform(multipart("/api/excel-import/books").file(file)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.imported").value(1))
                 .andExpect(jsonPath("$.skippedDuplicates").value(2))
+                .andExpect(jsonPath("$.skippedInvalid").value(0))
                 .andExpect(jsonPath("$.duplicateRows[0]").value(2))
                 .andExpect(jsonPath("$.duplicateRows[1]").value(4));
 
