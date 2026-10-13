@@ -2,6 +2,7 @@ package ir.iau.library.specification;
 
 import ir.iau.library.dto.BookLoanFilterDto;
 import ir.iau.library.entity.BookLoan;
+import ir.iau.library.service.Isbn;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
@@ -27,7 +28,15 @@ public class BookLoanSpecification {
             }
 
             if (StringUtils.hasText(criteria.getBookIsbn())) {
-                predicates.add(cb.equal(root.get("book").get("isbn13"), criteria.getBookIsbn()));
+                String scannedIsbn = Isbn.normalize(criteria.getBookIsbn());
+                String isbn10 = Isbn.toIsbn10(scannedIsbn);
+                String isbn13 = Isbn.toIsbn13(scannedIsbn);
+                List<Predicate> isbnMatches = new ArrayList<>(List.of(
+                        cb.equal(root.get("book").get("isbn10"), scannedIsbn),
+                        cb.equal(root.get("book").get("isbn13"), scannedIsbn)));
+                if (!isbn10.isBlank()) isbnMatches.add(cb.equal(root.get("book").get("isbn10"), isbn10));
+                if (!isbn13.isBlank()) isbnMatches.add(cb.equal(root.get("book").get("isbn13"), isbn13));
+                predicates.add(cb.or(isbnMatches.toArray(Predicate[]::new)));
             }
 
             if (criteria.getStatus() != null) {
