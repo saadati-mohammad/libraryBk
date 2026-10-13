@@ -47,9 +47,25 @@ public class BookService {
                         cb.like(PersianSearchNormalizer.normalize(cb, root.get("subject")), pattern, '\\'),
                         cb.like(PersianSearchNormalizer.normalize(cb, root.get("isbn10")), pattern, '\\'),
                         cb.like(PersianSearchNormalizer.normalize(cb, root.get("isbn13")), pattern, '\\'));
+                if (pageable.getSort().isUnsorted()) {
+                    String prefix = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+                    var title = PersianSearchNormalizer.normalize(cb, root.get("title"));
+                    var author = PersianSearchNormalizer.normalize(cb, root.get("author"));
+                    var subjectField = PersianSearchNormalizer.normalize(cb, root.get("subject"));
+                    var relevance = cb.<Integer>selectCase()
+                            .when(cb.equal(title, term), 0)
+                            .when(cb.like(title, prefix, '\\'), 1)
+                            .when(cb.like(author, pattern, '\\'), 2)
+                            .when(cb.like(subjectField, pattern, '\\'), 3)
+                            .otherwise(4);
+                    criteria.orderBy(cb.asc(relevance), cb.desc(root.get("id")));
+                }
             }
             Predicate categoryFilter = category.isBlank() ? cb.conjunction()
                     : cb.equal(PersianSearchNormalizer.normalize(cb, root.get("subject")), category);
+            if (term.isBlank() && pageable.getSort().isUnsorted()) {
+                criteria.orderBy(cb.desc(root.get("id")));
+            }
             return cb.and(active, search, categoryFilter);
         };
         return bookRepository.findAll(spec, pageable);

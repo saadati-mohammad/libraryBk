@@ -74,4 +74,27 @@ class PublicCatalogIntegrationTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(categories.toString()).contains("Public Category");
     }
+
+    @Test
+    void relevanceSortRanksExactTitlesBeforeAuthorMatches() throws Exception {
+        String suffix = Long.toString(System.nanoTime());
+        String term = "Relevance " + suffix;
+        Book authorMatch = books.saveAndFlush(Book.builder().title("Other title " + suffix)
+                .author(term).isbn13("9780306406157").subject("Relevance test")
+                .active(true).copyCount(1).build());
+        Book prefixMatch = books.saveAndFlush(Book.builder().title(term + " extended")
+                .author("Writer").isbn13("9781861972712").subject("Relevance test")
+                .active(true).copyCount(1).build());
+        Book exactMatch = books.saveAndFlush(Book.builder().title(term)
+                .author("Writer").isbn13("9780140328721").subject("Relevance test")
+                .active(true).copyCount(1).build());
+
+        JsonNode result = mapper.readTree(mockMvc.perform(get("/api/public/books")
+                        .param("q", term).param("sort", "relevance"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+
+        assertThat(result.path("content").get(0).path("id").asLong()).isEqualTo(exactMatch.getId());
+        assertThat(result.path("content").get(1).path("id").asLong()).isEqualTo(prefixMatch.getId());
+        assertThat(result.path("content").get(2).path("id").asLong()).isEqualTo(authorMatch.getId());
+    }
 }
