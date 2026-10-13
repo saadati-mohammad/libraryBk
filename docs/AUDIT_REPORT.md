@@ -182,3 +182,10 @@ The current application is a working small-library MVP: guests can discover titl
 - **Fix:** REST edit/delete now require the authenticated sender, aligning both transports. Recipient can still mark a message read.
 - **Verification:** `MessageAuthorizationTest` proves recipient update/delete return 403 and the message content/active state remain unchanged; all 11 tests in that class pass.
 - **Backlog:** T-014 remains in progress pending the full authorization matrix.
+
+### AUD-023 — HID device configuration is stored but not applied by runtime forms (Medium, open)
+
+- **Evidence:** the API validates and persists keyboard-wedge `prefix`, `suffix`, `terminator`, and `minimumLength`; the admin UI renders these fields. Runtime book and loan forms currently consume the effective policy's `allowedSources` only, treat any configured `DEVICE:*` entry as a generic allowed source, and submit their focused text field on Enter. No runtime path loads the selected device's profile, distinguishes fast scanner input from typing, or applies its configured terminator/prefix/suffix.
+- **Impact:** a saved profile using TAB or NONE, or a non-empty prefix/suffix, does not behave as configured. The management form implies behavior that users do not receive.
+- **Required action:** include only safe, currently enabled profiles selected by the effective policy in the policy response; bind that profile to reusable form-level scanner input handling; preserve manual typing and legacy ENTER behavior; add a test-scan wizard showing detected value, speed and terminator; prove behavior in H2-backed API tests and desktop/mobile browser tests.
+- **Backlog:** T-010, T-011 and T-012 remain in progress until this contract is implemented and verified.
