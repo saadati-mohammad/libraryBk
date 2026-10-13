@@ -2,6 +2,11 @@ package ir.iau.library.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ir.iau.library.entity.Book;
+import ir.iau.library.repository.BookRepository;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -14,6 +19,8 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.List;
+import java.io.ByteArrayOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -43,6 +50,9 @@ class BookActiveDefaultIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private BookRepository bookRepository;
 
     private String login() throws Exception {
         MvcResult res = mockMvc.perform(post("/api/auth/login")
@@ -157,5 +167,50 @@ class BookActiveDefaultIntegrationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void excelImportSkipsExistingAndInFileIsbnDuplicatesAndReportsRows() throws Exception {
+        String token = login();
+        long existingId = createBook(token, "{\"title\":\"Keep Original\",\"author\":\"Author\","
+                + "\"isbn10\":\"0306406152\",\"subject\":\"Subject\"}");
+        byte[] workbookBytes;
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("books");
+            Row header = sheet.createRow(0);
+            for (int index = 0; index <= 21; index++) header.createCell(index).setCellValue("col" + index);
+            Row existingDuplicate = sheet.createRow(1);
+            existingDuplicate.createCell(1).setCellValue("Must Not Replace Existing");
+            existingDuplicate.createCell(2).setCellValue("Author");
+            existingDuplicate.createCell(9).setCellValue("Subject");
+            existingDuplicate.createCell(6).setCellValue("9780306406157");
+            Row newBook = sheet.createRow(2);
+            newBook.createCell(1).setCellValue("New imported book");
+            newBook.createCell(2).setCellValue("Author");
+            newBook.createCell(9).setCellValue("Subject");
+            newBook.createCell(6).setCellValue("9781861972712");
+            Row fileDuplicate = sheet.createRow(3);
+            fileDuplicate.createCell(1).setCellValue("Duplicate row in workbook");
+            fileDuplicate.createCell(2).setCellValue("Author");
+            fileDuplicate.createCell(9).setCellValue("Subject");
+            fileDuplicate.createCell(0).setCellValue("0-306-40615-2");
+            workbook.write(output);
+            workbookBytes = output.toByteArray();
+        }
+
+        MockMultipartFile file = new MockMultipartFile("file", "books.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", workbookBytes);
+        mockMvc.perform(multipart("/api/excel-import/books").file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(1))
+                .andExpect(jsonPath("$.skippedDuplicates").value(2))
+                .andExpect(jsonPath("$.duplicateRows[0]").value(2))
+                .andExpect(jsonPath("$.duplicateRows[1]").value(4));
+
+        Book original = bookRepository.findById(existingId).orElseThrow();
+        assertThat(original.getTitle()).isEqualTo("Keep Original");
+        assertThat(bookRepository.findByIsbn13In(List.of("9781861972712"))).singleElement()
+                .extracting(Book::getTitle).isEqualTo("New imported book");
     }
 }

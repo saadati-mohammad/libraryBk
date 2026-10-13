@@ -1,6 +1,6 @@
 package ir.iau.library.controller;
 
-import ir.iau.library.dto.BookFilterDto;
+import ir.iau.library.dto.BookImportResult;
 import ir.iau.library.dto.PersonFilterDto;
 import ir.iau.library.service.ExcelImportService;
 import lombok.extern.slf4j.Slf4j;
@@ -31,11 +31,13 @@ public class ExcelImportController {
     @PostMapping("/books")
     public ResponseEntity<Map<String, Object>> importBooks(@RequestPart("file") MultipartFile file) {
         try {
-            List<BookFilterDto> books = excelImportService.importBooksFromExcel(file);
+            BookImportResult result = excelImportService.importBooksFromExcel(file);
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "imported", books.size(),
-                    "message", "Books successfully imported."));
+                    "imported", result.imported(),
+                    "skippedDuplicates", result.skippedDuplicates(),
+                    "duplicateRows", result.duplicateRows(),
+                    "message", "Books imported; duplicates were skipped without overwriting existing records."));
         } catch (Exception e) {
             // Full detail stays in the server log; the client gets a generic message.
             log.error("Error importing books from Excel: {}", e.getMessage(), e);

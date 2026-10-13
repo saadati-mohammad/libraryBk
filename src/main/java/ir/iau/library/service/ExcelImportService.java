@@ -2,6 +2,7 @@ package ir.iau.library.service;
 
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import ir.iau.library.dto.BookFilterDto;
+import ir.iau.library.dto.BookImportResult;
 import ir.iau.library.dto.PersonFilterDto;
 import ir.iau.library.entity.Book;
 import ir.iau.library.entity.Person;
@@ -19,8 +20,11 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ExcelImportService {
@@ -36,9 +40,8 @@ public class ExcelImportService {
 
     // متد اصلی برای خواندن فایل اکسل
     @Transactional // عملیات ذخیره را در یک تراکنش قرار می‌دهد
-    public List<BookFilterDto> importBooksFromExcel(MultipartFile file) throws IOException {
-        List<BookFilterDto> bookDtos = new ArrayList<>();
-        List<Book> booksToSave = new ArrayList<>();
+    public BookImportResult importBooksFromExcel(MultipartFile file) throws IOException {
+        List<ImportBookRow> importRows = new ArrayList<>();
         DataFormatter dataFormatter = new DataFormatter(); // برای تبدیل انواع داده به رشته
 
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
@@ -112,23 +115,85 @@ public class ExcelImportService {
                 bookDto.setColumnNumber(getCellValueAsString(row.getCell(20), dataFormatter));
                 bookDto.setPositionNote(getCellValueAsString(row.getCell(21), dataFormatter));
 
-                bookDtos.add(bookDto);
                 Book book = new Book(bookDto);
                 try {
                     BookService.normalizeBookIsbns(book);
                 } catch (IllegalArgumentException exception) {
                     throw new IllegalArgumentException("ردیف " + (row.getRowNum() + 1) + ": " + exception.getMessage(), exception);
                 }
-                booksToSave.add(book);
+                importRows.add(new ImportBookRow(row.getRowNum() + 1, book));
             }
         }
 
-        // ذخیره تمام کتاب‌ها به صورت یکجا برای بهینگی
+        // Fetch existing ISBN matches in one batch, then detect duplicates inside the file
+        // using the same canonical ISBN-10/ISBN-13 identity (where conversion is possible).
+        Set<String> isbn10Values = new LinkedHashSet<>();
+        Set<String> isbn13Values = new LinkedHashSet<>();
+        for (ImportBookRow row : importRows) {
+            isbn10Values.addAll(isbnKeys(row.book()).stream().filter(key -> key.startsWith("I10:"))
+                    .map(key -> key.substring(4)).toList());
+            isbn13Values.addAll(isbnKeys(row.book()).stream().filter(key -> key.startsWith("I13:"))
+                    .map(key -> key.substring(4)).toList());
+        }
+        Set<String> seenKeys = new HashSet<>();
+        for (Set<String> chunk : chunks(isbn10Values, 500)) {
+            bookRepository.findByIsbn10In(chunk).forEach(book -> seenKeys.addAll(isbnKeys(book)));
+        }
+        for (Set<String> chunk : chunks(isbn13Values, 500)) {
+            bookRepository.findByIsbn13In(chunk).forEach(book -> seenKeys.addAll(isbnKeys(book)));
+        }
+
+        List<Book> booksToSave = new ArrayList<>();
+        List<Integer> duplicateRows = new ArrayList<>();
+        for (ImportBookRow row : importRows) {
+            Set<String> keys = isbnKeys(row.book());
+            if (!keys.isEmpty() && keys.stream().anyMatch(seenKeys::contains)) {
+                duplicateRows.add(row.spreadsheetRow());
+                continue;
+            }
+            seenKeys.addAll(keys);
+            booksToSave.add(row.book());
+        }
+
+        // Save non-duplicates in one batch. Existing records are never overwritten.
         if (!booksToSave.isEmpty()) {
             bookRepository.saveAll(booksToSave);
         }
 
-        return bookDtos;
+        return new BookImportResult(booksToSave.size(), duplicateRows);
+    }
+
+    private record ImportBookRow(int spreadsheetRow, Book book) { }
+
+    private List<Set<String>> chunks(Set<String> values, int size) {
+        List<Set<String>> result = new ArrayList<>();
+        List<String> current = new ArrayList<>(size);
+        for (String value : values) {
+            current.add(value);
+            if (current.size() == size) {
+                result.add(Set.copyOf(current));
+                current.clear();
+            }
+        }
+        if (!current.isEmpty()) result.add(Set.copyOf(current));
+        return result;
+    }
+
+    private Set<String> isbnKeys(Book book) {
+        Set<String> keys = new LinkedHashSet<>();
+        String isbn10 = ir.iau.library.service.Isbn.normalize(book.getIsbn10());
+        String isbn13 = ir.iau.library.service.Isbn.normalize(book.getIsbn13());
+        if (ir.iau.library.service.Isbn.isValid(isbn10)) {
+            keys.add("I10:" + isbn10);
+            String equivalent = ir.iau.library.service.Isbn.toIsbn13(isbn10);
+            if (!equivalent.isEmpty()) keys.add("I13:" + equivalent);
+        }
+        if (ir.iau.library.service.Isbn.isValid(isbn13)) {
+            keys.add("I13:" + isbn13);
+            String equivalent = ir.iau.library.service.Isbn.toIsbn10(isbn13);
+            if (!equivalent.isEmpty()) keys.add("I10:" + equivalent);
+        }
+        return keys;
     }
 
     /**

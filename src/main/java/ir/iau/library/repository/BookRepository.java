@@ -10,6 +10,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Page;
 
 import java.util.Optional;
+import java.util.Collection;
+import java.util.List;
 
 @Repository
 public interface BookRepository extends JpaRepository<Book, Long>, JpaSpecificationExecutor<Book> {
@@ -40,4 +42,8 @@ public interface BookRepository extends JpaRepository<Book, Long>, JpaSpecificat
      * from the catalogue's point of view, so it must not be counted.
      */
     long countByActiveTrue();
+
+    /** Batch-load existing catalog matches for safe spreadsheet deduplication. */
+    List<Book> findByIsbn10In(Collection<String> isbn10Values);
+    List<Book> findByIsbn13In(Collection<String> isbn13Values);
 }
