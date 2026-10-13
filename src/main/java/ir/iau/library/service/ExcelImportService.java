@@ -1,15 +1,14 @@
 package ir.iau.library.service;
 
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import ir.iau.library.dto.BookFilterDto;
 import ir.iau.library.dto.BookImportResult;
 import ir.iau.library.dto.BookImportRowIssue;
 import ir.iau.library.dto.PersonFilterDto;
+import ir.iau.library.dto.PersonImportResult;
 import ir.iau.library.entity.Book;
 import ir.iau.library.entity.Person;
 import ir.iau.library.repository.BookRepository;
 import ir.iau.library.repository.PersonRepository;
-import ir.iau.library.specification.DuplicateFieldException;
 import jakarta.transaction.Transactional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
@@ -321,88 +320,93 @@ public class ExcelImportService {
 
 
 
-    @Transactional // عملیات ذخیره را در یک تراکنش قرار می‌دهد
-    public List<PersonFilterDto> importPersonsFromExcel(MultipartFile file) throws IOException, InvalidFormatException {
-        validateImportFile(file);
-        List<PersonFilterDto> personDtos = new ArrayList<>();
-        DataFormatter dataFormatter = new DataFormatter(); // برای تبدیل انواع داده به رشته
+    @Transactional
+    public PersonImportResult importPersonsFromExcel(MultipartFile file) throws IOException {
+        return processPersonImport(file, true);
+    }
 
+    @Transactional
+    public PersonImportResult previewPersonsFromExcel(MultipartFile file) throws IOException {
+        return processPersonImport(file, false);
+    }
+
+    private PersonImportResult processPersonImport(MultipartFile file, boolean persist) throws IOException {
+        validateImportFile(file);
+        List<PersonImportRow> rows = new ArrayList<>();
+        List<BookImportRowIssue> invalid = new ArrayList<>();
+        int totalRows = 0;
+        DataFormatter formatter = new DataFormatter();
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             if (workbook.getNumberOfSheets() == 0) throw new IllegalArgumentException("فایل اکسل هیچ برگی ندارد.");
             Sheet sheet = workbook.getSheetAt(0);
             validateRowCount(sheet);
-            Iterator<Row> rowIterator = sheet.iterator();
-
-            while (rowIterator.hasNext()) {
-                Row row = rowIterator.next();
-                if (row.getRowNum() == 0) continue;  // Skip header row
-
-                // Read data from each cell and convert to DTO
-                PersonFilterDto personDto = new PersonFilterDto();
-                personDto.setFirstName(getCellValueAsString(row.getCell(0), dataFormatter));
-                personDto.setLastName(getCellValueAsString(row.getCell(1), dataFormatter));
-                personDto.setEmail(getCellValueAsString(row.getCell(2), dataFormatter));
-                personDto.setPhone(getCellValueAsString(row.getCell(3), dataFormatter));
-                personDto.setNationalId(getCellValueAsString(row.getCell(4), dataFormatter));
-                personDto.setMembershipType(getCellValueAsString(row.getCell(5), dataFormatter));
-                personDto.setAddress(getCellValueAsString(row.getCell(6), dataFormatter));
-                String activeStr = getCellValueAsString(row.getCell(7), dataFormatter);
-
-                // Check for duplicate fields
-                if (personRepository.existsByEmail(personDto.getEmail())) {
-                    throw new DuplicateFieldException("Email", personDto.getEmail());
+            for (int index = 1; index <= sheet.getLastRowNum(); index++) {
+                Row row = sheet.getRow(index);
+                if (row == null || isRowEmpty(row)) continue;
+                totalRows++;
+                int displayRow = index + 1;
+                PersonFilterDto dto = new PersonFilterDto();
+                dto.setFirstName(getCellValueAsString(row.getCell(0), formatter));
+                dto.setLastName(getCellValueAsString(row.getCell(1), formatter));
+                dto.setEmail(getCellValueAsString(row.getCell(2), formatter));
+                dto.setPhone(getCellValueAsString(row.getCell(3), formatter));
+                dto.setNationalId(getCellValueAsString(row.getCell(4), formatter));
+                dto.setMembershipType(getCellValueAsString(row.getCell(5), formatter));
+                dto.setAddress(getCellValueAsString(row.getCell(6), formatter));
+                String active = getCellValueAsString(row.getCell(7), formatter);
+                if (active != null && !active.isBlank() && !isValidActiveCell(active)) {
+                    invalid.add(new BookImportRowIssue(displayRow, "وضعیت فعال باید TRUE/FALSE، فعال/غیرفعال یا ۱/۰ باشد."));
+                    continue;
                 }
-
-                if (personRepository.existsByNationalId(personDto.getNationalId())) {
-                    throw new DuplicateFieldException("National ID", personDto.getNationalId());
+                dto.setActive(isActiveCell(active));
+                try {
+                    dto.setBirthDate(parseOptionalImportDate(getCellValueAsString(row.getCell(8), formatter)));
+                    dto.setMembershipDateFrom(parseOptionalImportDate(getCellValueAsString(row.getCell(9), formatter)));
+                    dto.setMembershipDateTo(parseOptionalImportDate(getCellValueAsString(row.getCell(10), formatter)));
+                } catch (RuntimeException ex) {
+                    invalid.add(new BookImportRowIssue(displayRow, "تاریخ باید معتبر و با قالب YYYY-MM-DD باشد."));
+                    continue;
                 }
-                if (activeStr != null) {
-                    personDto.setActive(isActiveCell(activeStr));
-                } else {
-                    personDto.setActive(true);
+                Person entity = new Person(dto);
+                Set<String> violations = validator.validate(entity).stream()
+                        .map(ConstraintViolation::getMessage).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+                if (!violations.isEmpty()) {
+                    invalid.add(new BookImportRowIssue(displayRow, String.join("؛ ", violations)));
+                    continue;
                 }
-                // Handle birthDate and membershipDate fields
-                String birthDateStr = getCellValueAsString(row.getCell(8), dataFormatter);
-                if (birthDateStr != null && !birthDateStr.isEmpty()) {
-                    try {
-                        personDto.setBirthDate(LocalDate.parse(birthDateStr, DateTimeFormatter.ISO_LOCAL_DATE)); // YYYY-MM-DD
-                    } catch (Exception e) {
-                        // Handle invalid date format, log it if necessary
-                        System.err.println("Could not parse birth date: " + birthDateStr + " at row " + row.getRowNum());
-                    }
-                }
-
-                String membershipDateFromStr = getCellValueAsString(row.getCell(9), dataFormatter);
-                if (membershipDateFromStr != null && !membershipDateFromStr.isEmpty()) {
-                    try {
-                        personDto.setMembershipDateFrom(LocalDate.parse(membershipDateFromStr, DateTimeFormatter.ISO_LOCAL_DATE)); // YYYY-MM-DD
-                    } catch (Exception e) {
-                        // Handle invalid date format, log it if necessary
-                        System.err.println("Could not parse membership date from: " + membershipDateFromStr + " at row " + row.getRowNum());
-                    }
-                }
-
-                String membershipDateToStr = getCellValueAsString(row.getCell(10), dataFormatter);
-                if (membershipDateToStr != null && !membershipDateToStr.isEmpty()) {
-                    try {
-                        personDto.setMembershipDateTo(LocalDate.parse(membershipDateToStr, DateTimeFormatter.ISO_LOCAL_DATE)); // YYYY-MM-DD
-                    } catch (Exception e) {
-                        // Handle invalid date format, log it if necessary
-                        System.err.println("Could not parse membership date to: " + membershipDateToStr + " at row " + row.getRowNum());
-                    }
-                }
-
-                // Add DTO to the list
-                personDtos.add(personDto);
-
-                // Save to DB (if necessary)
-                Person person = new Person(personDto);
-                personRepository.save(person);
+                rows.add(new PersonImportRow(displayRow, dto, entity));
             }
         }
 
-        return personDtos;
+        Set<String> emails = rows.stream().map(r -> r.dto().getEmail().toLowerCase(java.util.Locale.ROOT)).collect(java.util.stream.Collectors.toSet());
+        Set<String> nationalIds = rows.stream().map(r -> r.dto().getNationalId()).collect(java.util.stream.Collectors.toSet());
+        Set<String> knownEmails = personRepository.findByEmailInIgnoreCase(emails).stream()
+                .map(p -> p.getEmail().toLowerCase(java.util.Locale.ROOT)).collect(java.util.stream.Collectors.toSet());
+        Set<String> knownNationalIds = personRepository.findByNationalIdIn(nationalIds).stream()
+                .map(Person::getNationalId).collect(java.util.stream.Collectors.toSet());
+        Set<String> seenEmails = new HashSet<>();
+        Set<String> seenNationalIds = new HashSet<>();
+        List<Integer> duplicates = new ArrayList<>();
+        List<Person> eligible = new ArrayList<>();
+        for (PersonImportRow row : rows) {
+            String email = row.dto().getEmail().toLowerCase(java.util.Locale.ROOT);
+            String nationalId = row.dto().getNationalId();
+            if (knownEmails.contains(email) || knownNationalIds.contains(nationalId)
+                    || !seenEmails.add(email) || !seenNationalIds.add(nationalId)) {
+                duplicates.add(row.row());
+            } else {
+                eligible.add(row.person());
+            }
+        }
+        if (persist && !eligible.isEmpty()) personRepository.saveAll(eligible);
+        return new PersonImportResult(persist ? eligible.size() : 0, eligible.size(), totalRows, duplicates, invalid);
     }
+
+    private static LocalDate parseOptionalImportDate(String value) {
+        return value == null || value.isBlank() ? null : LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
+    }
+
+    private record PersonImportRow(int row, PersonFilterDto dto, Person person) { }
 
     /**
      * Interprets the spreadsheet's "active" cell.

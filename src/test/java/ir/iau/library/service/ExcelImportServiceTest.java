@@ -1,6 +1,7 @@
 package ir.iau.library.service;
 
 import ir.iau.library.entity.Book;
+import ir.iau.library.entity.Person;
 import ir.iau.library.repository.BookRepository;
 import ir.iau.library.repository.PersonRepository;
 import org.apache.poi.ss.usermodel.Row;
@@ -20,6 +21,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -183,6 +185,53 @@ class ExcelImportServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("حجم فایل");
         org.mockito.Mockito.verify(bookRepository, org.mockito.Mockito.never()).saveAll(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void previewPersonsValidatesRowsAndNeverWrites() throws Exception {
+        var result = service.previewPersonsFromExcel(personWorkbook(
+                new String[]{"مریم", "رضایی", "maryam@example.test", "09120000000", "0012345678"},
+                new String[]{"", "نامعتبر", "bad-email", "", ""}));
+
+        assertThat(result.totalRows()).isEqualTo(2);
+        assertThat(result.eligible()).isEqualTo(1);
+        assertThat(result.invalidRows()).extracting("row").containsExactly(3);
+        verify(personRepository, never()).saveAll(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void importPersonsSkipsExistingAndInWorkbookDuplicateIdentifiers() throws Exception {
+        Person existing = new Person();
+        existing.setEmail("EXISTING@example.test");
+        existing.setNationalId("0012345678");
+        when(personRepository.findByEmailInIgnoreCase(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(existing));
+
+        var result = service.importPersonsFromExcel(personWorkbook(
+                new String[]{"مریم", "رضایی", "existing@example.test", "", "0012345678"},
+                new String[]{"علی", "محمدی", "ali@example.test", "", "0098765432"},
+                new String[]{"سارا", "محمدی", "ALI@example.test", "", "0011122233"}));
+
+        assertThat(result.imported()).isEqualTo(1);
+        assertThat(result.duplicateRows()).containsExactly(2, 4);
+        verify(personRepository).saveAll(org.mockito.ArgumentMatchers.argThat(saved ->
+                java.util.stream.StreamSupport.stream(saved.spliterator(), false).count() == 1));
+    }
+
+    private MockMultipartFile personWorkbook(String[]... persons) throws Exception {
+        try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet("members");
+            sheet.createRow(0).createCell(0).setCellValue("firstName");
+            for (int index = 0; index < persons.length; index++) {
+                Row row = sheet.createRow(index + 1);
+                for (int cell = 0; cell < persons[index].length; cell++) {
+                    row.createCell(cell).setCellValue(persons[index][cell]);
+                }
+            }
+            wb.write(out);
+            return new MockMultipartFile("file", "persons.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out.toByteArray());
+        }
     }
 
     private MockMultipartFile xlsxWithIsbns(String... isbns) throws Exception {

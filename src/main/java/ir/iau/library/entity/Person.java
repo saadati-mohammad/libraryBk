@@ -92,5 +92,7 @@ public class Person {
         this.membershipType = filterDto.getMembershipType();
         this.address = filterDto.getAddress();
         this.active = filterDto.getActive();
+        this.birthDate = filterDto.getBirthDate();
+        this.membershipDate = filterDto.getMembershipDateFrom();
     }
 }
