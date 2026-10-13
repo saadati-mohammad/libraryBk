@@ -13,6 +13,7 @@ import jakarta.transaction.Transactional;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -31,21 +32,35 @@ public class ExcelImportService {
 
     private final BookRepository bookRepository;
     private final PersonRepository personRepository;
+    private final long maxImportFileBytes;
+    private final int maxImportRows;
 
     @Autowired
-    public ExcelImportService(BookRepository bookRepository, PersonRepository personRepository) {
+    public ExcelImportService(BookRepository bookRepository, PersonRepository personRepository,
+                              @Value("${app.upload.max-file-size:10485760}") long maxImportFileBytes,
+                              @Value("${app.import.max-rows:5000}") int maxImportRows) {
         this.bookRepository = bookRepository;
         this.personRepository = personRepository;
+        this.maxImportFileBytes = maxImportFileBytes;
+        this.maxImportRows = maxImportRows;
+    }
+
+    /** Test and non-Spring construction keeps the documented safe defaults. */
+    public ExcelImportService(BookRepository bookRepository, PersonRepository personRepository) {
+        this(bookRepository, personRepository, 10L * 1024 * 1024, 5000);
     }
 
     // متد اصلی برای خواندن فایل اکسل
     @Transactional // عملیات ذخیره را در یک تراکنش قرار می‌دهد
     public BookImportResult importBooksFromExcel(MultipartFile file) throws IOException {
+        validateImportFile(file);
         List<ImportBookRow> importRows = new ArrayList<>();
         DataFormatter dataFormatter = new DataFormatter(); // برای تبدیل انواع داده به رشته
 
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+            if (workbook.getNumberOfSheets() == 0) throw new IllegalArgumentException("فایل اکسل هیچ برگی ندارد.");
             Sheet sheet = workbook.getSheetAt(0);
+            validateRowCount(sheet);
             Iterator<Row> rowIterator = sheet.iterator();
 
             // از روی هدر رد شو
@@ -244,15 +259,32 @@ public class ExcelImportService {
         return true;
     }
 
+    private void validateImportFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("فایل اکسل خالی است.");
+        if (file.getSize() > maxImportFileBytes) {
+            throw new IllegalArgumentException("حجم فایل از سقف مجاز واردسازی بیشتر است.");
+        }
+    }
+
+    private void validateRowCount(Sheet sheet) {
+        // Row zero is the header; lastRowNum is already the number of possible data rows.
+        if (sheet.getLastRowNum() > maxImportRows) {
+            throw new IllegalArgumentException("تعداد ردیف‌های فایل از سقف مجاز واردسازی (" + maxImportRows + ") بیشتر است.");
+        }
+    }
+
 
 
     @Transactional // عملیات ذخیره را در یک تراکنش قرار می‌دهد
     public List<PersonFilterDto> importPersonsFromExcel(MultipartFile file) throws IOException, InvalidFormatException {
+        validateImportFile(file);
         List<PersonFilterDto> personDtos = new ArrayList<>();
         DataFormatter dataFormatter = new DataFormatter(); // برای تبدیل انواع داده به رشته
 
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+            if (workbook.getNumberOfSheets() == 0) throw new IllegalArgumentException("فایل اکسل هیچ برگی ندارد.");
             Sheet sheet = workbook.getSheetAt(0);
+            validateRowCount(sheet);
             Iterator<Row> rowIterator = sheet.iterator();
 
             while (rowIterator.hasNext()) {

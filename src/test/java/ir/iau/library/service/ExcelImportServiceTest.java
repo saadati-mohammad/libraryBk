@@ -22,6 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.lenient;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Regression coverage for the Excel book import. The original code called
@@ -147,6 +148,27 @@ class ExcelImportServiceTest {
 
         assertThat(result.imported()).isZero();
         assertThat(result.duplicateRows()).containsExactly(2);
+        org.mockito.Mockito.verify(bookRepository, org.mockito.Mockito.never()).saveAll(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void importBooks_rejectsWorkbookAboveConfiguredRowLimitBeforeSavingAnything() throws Exception {
+        service = new ExcelImportService(bookRepository, personRepository, 1_000_000, 2);
+
+        assertThatThrownBy(() -> service.importBooksFromExcel(xlsxWithIsbns("9780306406157", "9781861972712", "9780140328721")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("سقف مجاز واردسازی");
+        org.mockito.Mockito.verify(bookRepository, org.mockito.Mockito.never()).saveAll(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void importBooks_rejectsFilesAboveConfiguredByteLimit() throws Exception {
+        service = new ExcelImportService(bookRepository, personRepository, 1, 5000);
+        MockMultipartFile file = xlsxWithIsbns("9780306406157");
+
+        assertThatThrownBy(() -> service.importBooksFromExcel(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("حجم فایل");
         org.mockito.Mockito.verify(bookRepository, org.mockito.Mockito.never()).saveAll(org.mockito.ArgumentMatchers.anyList());
     }
 
