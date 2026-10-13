@@ -146,6 +146,45 @@ class InputFormPolicyIntegrationTest {
                 .isEqualTo("user");
     }
 
+    @Test
+    void effectivePolicyReturnsOnlySelectedEnabledDeviceProfilesToTheirOwner() throws Exception {
+        String owner = "profile-owner-" + System.nanoTime();
+        String other = "profile-other-" + System.nanoTime();
+        createLibrarian(owner);
+        createLibrarian(other);
+        InputDevice device = new InputDevice();
+        device.setName("Owned wedge scanner");
+        device.setTypeKey("KEYBOARD_WEDGE");
+        device.setOwnerUsername(owner);
+        device.setStation("main-desk");
+        device.setConfigJson("{\"prefix\":\"[\",\"suffix\":\"]\",\"terminator\":\"TAB\",\"minimumLength\":10}");
+        device.setTokenHash("must-never-be-returned");
+        device = devices.saveAndFlush(device);
+
+        String ownerToken = jwtService.generateToken(owner, "LIBRARIAN");
+        mvc.perform(put("/api/input-policies/book-registration")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("station", "main-desk",
+                                "allowedSources", List.of("MANUAL", "DEVICE:" + device.getId()),
+                                "defaultSource", "DEVICE:" + device.getId()))))
+                .andExpect(status().isOk());
+
+        var ownPolicy = mapper.readTree(mvc.perform(get("/api/input-policies/book-registration")
+                        .param("station", "main-desk").header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(ownPolicy.path("deviceProfiles")).hasSize(1);
+        assertThat(ownPolicy.path("deviceProfiles").get(0).path("deviceId").asLong()).isEqualTo(device.getId());
+        assertThat(ownPolicy.path("deviceProfiles").get(0).path("config").path("terminator").asText()).isEqualTo("TAB");
+        assertThat(ownPolicy.toString()).doesNotContain("must-never-be-returned", "tokenHash");
+
+        String otherToken = jwtService.generateToken(other, "LIBRARIAN");
+        var otherPolicy = mapper.readTree(mvc.perform(get("/api/input-policies/book-registration")
+                        .param("station", "main-desk").header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(otherPolicy.path("deviceProfiles")).isEmpty();
+    }
+
     private void createLibrarian(String username) {
         StaffAccount account = new StaffAccount();
         account.setUsername(username);

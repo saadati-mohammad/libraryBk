@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ir.iau.library.dto.InputFormPolicyDto;
+import ir.iau.library.dto.InputDeviceProfileDto;
 import ir.iau.library.dto.SaveInputFormPolicyRequest;
 import ir.iau.library.entity.InputDevice;
 import ir.iau.library.entity.InputFormPolicy;
@@ -18,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 @Service
@@ -50,8 +52,8 @@ public class InputFormPolicyService {
                 .orElse(null);
         if (policy == null) return new InputFormPolicyDto(formKey, stationKey,
                 List.of("MANUAL", "KEYBOARD_WEDGE", "PHONE_CAMERA"), "MANUAL",
-                "system-default", null, null, 0);
-        return toDto(policy);
+                "system-default", null, null, 0, List.of());
+        return toDto(policy, username, stationKey);
     }
 
     @Transactional(readOnly = true)
@@ -108,7 +110,7 @@ public class InputFormPolicyService {
         policy.setDefaultSource(defaultSource);
         policy.setUpdatedBy(actor);
         policy.setUpdatedAt(Instant.now());
-        return toDto(policies.saveAndFlush(policy));
+        return toDto(policies.saveAndFlush(policy), owner, station);
     }
 
     private void validateSource(String source, String owner, String station) {
@@ -139,14 +141,44 @@ public class InputFormPolicyService {
         return policies.findByFormKeyAndOwnerUsernameAndStation(form, owner, station);
     }
 
-    private InputFormPolicyDto toDto(InputFormPolicy policy) {
+    private InputFormPolicyDto toDto(InputFormPolicy policy, String effectiveOwner, String requestedStation) {
         try {
             List<String> sources = mapper.readValue(policy.getAllowedSourcesJson(), new TypeReference<>() { });
+            List<InputDeviceProfileDto> profiles = sources.stream()
+                    .filter(source -> source.startsWith("DEVICE:"))
+                    .map(source -> profile(source, effectiveOwner, requestedStation))
+                    .flatMap(java.util.Optional::stream)
+                    .toList();
             return new InputFormPolicyDto(policy.getFormKey(), policy.getStation(), sources, policy.getDefaultSource(),
                     InputFormPolicy.GLOBAL_OWNER.equals(policy.getOwnerUsername()) ? "global" : "user",
-                    policy.getUpdatedBy(), policy.getUpdatedAt(), policy.getVersion());
+                    policy.getUpdatedBy(), policy.getUpdatedAt(), policy.getVersion(), profiles);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("Stored input policy is invalid", error);
+        }
+    }
+
+    private java.util.Optional<InputDeviceProfileDto> profile(String source, String effectiveOwner, String station) {
+        try {
+            long id = Long.parseLong(source.substring("DEVICE:".length()));
+            return devices.findById(id)
+                    .filter(InputDevice::isEnabled)
+                    .filter(device -> device.getRevokedAt() == null)
+                    .filter(device -> InputFormPolicy.GLOBAL_OWNER.equals(effectiveOwner)
+                            ? device.getOwnerUsername() == null
+                            : device.getOwnerUsername() == null || effectiveOwner.equals(device.getOwnerUsername()))
+                    .filter(device -> station.isBlank() || device.getStation() == null || device.getStation().isBlank()
+                            || station.equals(device.getStation()))
+                    .map(device -> {
+                        try {
+                            Map<String, Object> config = mapper.readValue(device.getConfigJson(), new TypeReference<>() { });
+                            providers.require(device.getTypeKey()).validateConfig(config);
+                            return new InputDeviceProfileDto(device.getId(), device.getName(), device.getTypeKey(), config);
+                        } catch (JsonProcessingException error) {
+                            throw new IllegalStateException("Stored device configuration is invalid", error);
+                        }
+                    });
+        } catch (NumberFormatException error) {
+            return java.util.Optional.empty();
         }
     }
 

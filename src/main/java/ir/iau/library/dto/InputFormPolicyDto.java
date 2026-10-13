@@ -5,5 +5,5 @@ import java.util.List;
 
 public record InputFormPolicyDto(String formKey, String station, List<String> allowedSources,
                                  String defaultSource, String scope, String updatedBy,
-                                 Instant updatedAt, long version) {
+                                 Instant updatedAt, long version, List<InputDeviceProfileDto> deviceProfiles) {
 }
