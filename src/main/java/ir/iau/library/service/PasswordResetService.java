@@ -100,7 +100,8 @@ public class PasswordResetService {
         if (rawToken == null || rawToken.length() < 32 || rawToken.length() > 200) {
             throw new EntityNotFoundException("لینک بازیابی نامعتبر یا منقضی شده است");
         }
-        PasswordResetToken reset = tokens.findByTokenHash(hash(rawToken))
+        // Serialize concurrent redemption attempts so a one-time token cannot reset twice.
+        PasswordResetToken reset = tokens.findByTokenHashForUpdate(hash(rawToken))
                 .orElseThrow(() -> new EntityNotFoundException("لینک بازیابی نامعتبر یا منقضی شده است"));
         Instant now = Instant.now();
         if (reset.getUsedAt() != null || !reset.getExpiresAt().isAfter(now)) {
