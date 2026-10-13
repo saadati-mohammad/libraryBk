@@ -32,7 +32,8 @@ public class BookMetadataService {
             @Value("${app.catalog.open-library-base-url:https://openlibrary.org}") String openLibraryUrl,
             @Value("${app.catalog.google-books-base-url:https://www.googleapis.com/books/v1}") String googleBooksUrl,
             @Value("${app.catalog.google-books-api-key:}") String googleBooksApiKey) {
-        this(createClient(openLibraryUrl), createClient(googleBooksUrl), googleBooksApiKey, true);
+        this(createClient(openLibraryUrl), createClient(googleBooksUrl), googleBooksApiKey,
+                googleBooksApiKey != null && !googleBooksApiKey.isBlank());
     }
 
     /** Test seam for the pre-existing single-provider unit tests. */
@@ -41,7 +42,8 @@ public class BookMetadataService {
     }
 
     BookMetadataService(RestClient openLibrary, RestClient googleBooks, String googleBooksApiKey) {
-        this(openLibrary, googleBooks, googleBooksApiKey, true);
+        this(openLibrary, googleBooks, googleBooksApiKey,
+                googleBooksApiKey != null && !googleBooksApiKey.isBlank());
     }
 
     private BookMetadataService(RestClient openLibrary, RestClient googleBooks,

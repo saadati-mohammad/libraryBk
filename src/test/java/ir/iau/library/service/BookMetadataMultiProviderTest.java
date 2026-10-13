@@ -24,7 +24,7 @@ class BookMetadataMultiProviderTest {
         RestClient.Builder googleBooks = RestClient.builder().baseUrl("https://googlebooks.test");
         openLibraryServer = MockRestServiceServer.bindTo(openLibrary).build();
         googleBooksServer = MockRestServiceServer.bindTo(googleBooks).build();
-        service = new BookMetadataService(openLibrary.build(), googleBooks.build(), "");
+        service = new BookMetadataService(openLibrary.build(), googleBooks.build(), "test-api-key");
     }
 
     @AfterEach
@@ -65,5 +65,43 @@ class BookMetadataMultiProviderTest {
         assertThatThrownBy(() -> service.search("x"))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("400 BAD_REQUEST");
+    }
+
+    @Test
+    void searchesIranianIsbnOnGoogleBooksAndMapsPersianMetadata() {
+        openLibraryServer.expect(requestTo(org.hamcrest.Matchers.containsString("isbn=9786223163593")))
+                .andRespond(withSuccess("{\"docs\":[]}", MediaType.APPLICATION_JSON));
+        googleBooksServer.expect(requestTo(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("q=isbn:9786223163593"),
+                        org.hamcrest.Matchers.containsString("key=test-api-key"))))
+                .andRespond(withSuccess("""
+                        {"items":[{"volumeInfo":{"title":"نمونهٔ کتاب ایرانی","authors":["نویسندهٔ ایرانی"],
+                        "publisher":"ناشر ایرانی","language":"fa","industryIdentifiers":[
+                        {"type":"ISBN_13","identifier":"9786223163593"}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var results = service.lookup("۹۷۸-۶۲۲-۳۱۶-۳۵۹-۳");
+
+        assertThat(results).singleElement().satisfies(item -> {
+            assertThat(item.title()).isEqualTo("نمونهٔ کتاب ایرانی");
+            assertThat(item.author()).isEqualTo("نویسندهٔ ایرانی");
+            assertThat(item.publisher()).isEqualTo("ناشر ایرانی");
+            assertThat(item.isbn13()).isEqualTo("9786223163593");
+        });
+    }
+
+    @Test
+    void skipsGoogleBooksWhenNoApiKeyIsConfigured() {
+        RestClient.Builder openLibrary = RestClient.builder().baseUrl("https://openlibrary.test");
+        RestClient.Builder googleBooks = RestClient.builder().baseUrl("https://googlebooks.test");
+        var openServer = MockRestServiceServer.bindTo(openLibrary).build();
+        MockRestServiceServer.bindTo(googleBooks).build();
+        openServer.expect(requestTo(org.hamcrest.Matchers.containsString("q=Shazdeh")))
+                .andRespond(withSuccess("{\"docs\":[{\"title\":\"Shazdeh\"}]}", MediaType.APPLICATION_JSON));
+        var noKeyService = new BookMetadataService(openLibrary.build(), googleBooks.build(), "");
+
+        assertThat(noKeyService.search("Shazdeh")).singleElement()
+                .satisfies(item -> assertThat(item.title()).isEqualTo("Shazdeh"));
+        openServer.verify();
     }
 }
