@@ -48,7 +48,8 @@ public class InputFormPolicyService {
                 .or(() -> find(formKey, InputFormPolicy.GLOBAL_OWNER, stationKey))
                 .or(() -> find(formKey, InputFormPolicy.GLOBAL_OWNER, ""))
                 .orElse(null);
-        if (policy == null) return new InputFormPolicyDto(formKey, stationKey, List.of("MANUAL"), "MANUAL",
+        if (policy == null) return new InputFormPolicyDto(formKey, stationKey,
+                List.of("MANUAL", "KEYBOARD_WEDGE", "PHONE_CAMERA"), "MANUAL",
                 "system-default", null, null, 0);
         return toDto(policy);
     }

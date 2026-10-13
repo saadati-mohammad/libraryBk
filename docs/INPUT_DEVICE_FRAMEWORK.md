@@ -34,7 +34,7 @@ H2 migration `V9` and MySQL migration `V8` create `input_form_policy`. Policy en
 - `PUT /api/input-policies/{formKey}` saves that caller's personal policy; `station` is optional in the JSON body.
 - `GET/PUT /api/admin/input-policies/{formKey}` read or write a global default (omit `ownerUsername`) or a policy targeted to an existing staff username (provide `ownerUsername`); `GET` resolves that staff member's effective policy through the same fallback order. Admin-only routes cannot be called by librarians.
 - The response includes the selected scope, allowed source keys, default, update metadata, and optimistic version. Device keys use `DEVICE:{id}` and are validated for availability, ownership, and station compatibility before saving.
-- Resolution order is personal station override, personal default, global station override, global default, then system `MANUAL` fallback. Personal writes cannot set another owner; admin-targeted users are resolved case-insensitively to the canonical staff username.
+- Resolution order is personal station override, personal default, global station override, global default, then a compatibility system fallback allowing `MANUAL`, `KEYBOARD_WEDGE`, and `PHONE_CAMERA` with `MANUAL` selected by default. That fallback preserves the existing scanner entry points until an administrator explicitly restricts a form. Personal writes cannot set another owner; admin-targeted users are resolved case-insensitively to the canonical staff username.
 - `allowedSources` must be nonempty, unique, contain only registered provider keys or valid available device keys, and include `defaultSource`. Form keys are lowercase letters/digits/hyphens, max 64 characters.
 
 ## Boundaries still to implement

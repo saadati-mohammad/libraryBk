@@ -74,8 +74,10 @@ class InputFormPolicyIntegrationTest {
         MvcResult otherStation = mvc.perform(get("/api/input-policies/book-registration")
                         .param("station", "other-desk").header("Authorization", "Bearer " + staffToken))
                 .andExpect(status().isOk()).andReturn();
-        assertThat(mapper.readTree(otherStation.getResponse().getContentAsString()).path("defaultSource").asText())
-                .isEqualTo("MANUAL");
+        var systemDefault = mapper.readTree(otherStation.getResponse().getContentAsString());
+        assertThat(systemDefault.path("defaultSource").asText()).isEqualTo("MANUAL");
+        assertThat(systemDefault.path("allowedSources").toString())
+                .contains("\"MANUAL\"", "\"KEYBOARD_WEDGE\"", "\"PHONE_CAMERA\"");
     }
 
     @Test
