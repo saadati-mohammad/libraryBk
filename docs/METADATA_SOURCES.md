@@ -21,6 +21,8 @@ Iranian titles can currently be returned if they exist in Open Library or Google
 
 Automated H2-backed provider tests cover Persian title mapping, Persian-digit ISBN normalization, ISBN query construction, API-key propagation, provider disablement without a key, deduplication, and provider error handling. These use controlled HTTP fixtures; they prove the integration contract, not that a particular Iranian publication is present in an external index.
 
+Live smoke check (2026-10-13): Mahrdoo lists ISBN `9786001181146` for a Persian edition of *Hasht Ketab* (listing: <https://mahdroo.ir/shop/product/book-293140-swedq5>). Open Library returned HTTP 404 for that ISBN, and Google Books returned HTTP 403 because no API key is configured in this workspace. This verifies a real Iranian ISBN but does **not** verify that either configured metadata provider can return it. The API-key-gated Google provider is available when the operator supplies a valid credential; live Iranian lookup remains open until an authorized provider returns a record.
+
 Before marking regional metadata coverage complete, verify a real Iranian ISBN against a permitted live source. If a public API, partner credential, or licensed source becomes available, add it as an isolated provider with bounded requests, source attribution, configuration, and fixture plus live contract tests. Do not treat a timeout or a not-found response from one source as proof that a book does not exist.
 
 ## References
@@ -29,3 +31,4 @@ Before marking regional metadata coverage complete, verify a real Iranian ISBN a
 - [Google Books API: using the API and credentials](https://developers.google.com/books/docs/v1/using)
 - [Open Library API documentation](https://openlibrary.org/developers/api)
 - [National Library and Archives of Iran OPAC](https://opac.nlai.ir/opac-prod/index.jsp)
+- [Mahrdoo catalog listing for the live-check ISBN](https://mahdroo.ir/shop/product/book-293140-swedq5)
