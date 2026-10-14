@@ -66,14 +66,29 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      *
      * @param registry رجیستری برای ثبت endpoint ها
      */
+    private static final String[] DEFAULT_WS_ALLOWED_ORIGINS = {
+            "http://localhost:4200",
+            "http://localhost",
+            "https://lms-iau.vercel.app",
+            "https://*.vercel.app",
+            "https://*.onrender.com",
+            "https://lms-iau.liara.run",
+            "https://lms-iau-ac.liara.run"
+    };
+
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // endpoint اصلی برای اتصال وب‌سوکت.
         // آدرس '/ws-chat' با چیزی که در فایل environment.ts فرانت‌اند تعریف شده مطابقت دارد.
-        String[] origins = Arrays.stream(allowedOrigins.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .toArray(String[]::new);
+        String[] origins = (allowedOrigins != null && !allowedOrigins.isBlank())
+                ? Arrays.stream(allowedOrigins.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toArray(String[]::new)
+                : DEFAULT_WS_ALLOWED_ORIGINS;
+        if (origins.length == 0) {
+            origins = DEFAULT_WS_ALLOWED_ORIGINS;
+        }
 
         registry.addEndpoint("/ws-chat")
                 // Origins come from configuration so dev/prod can differ safely.

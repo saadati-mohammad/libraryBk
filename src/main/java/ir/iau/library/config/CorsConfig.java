@@ -35,15 +35,27 @@ public class CorsConfig implements WebMvcConfigurer {
     private static final String[] DEFAULT_ALLOWED_ORIGINS = {
             "http://localhost:4200",            // توسعه محلی
             "http://localhost",                 // دیپلوی استاتیک
-            "https://lms-iau-ac.liara.run",     // لیارا
-            "https://lms-iau.vercel.app"        // ورسل
+            "https://lms-iau.vercel.app",       // ورسل تولیدی
+            "https://*.vercel.app",             // پیش‌نمایش‌های ورسل
+            "https://*.onrender.com",           // دامنه‌های سرویس رندر
+            "https://lms-iau.liara.run",        // لیارا پیش‌فرض
+            "https://lms-iau-ac.liara.run"      // لیارا دامنه رزرو
     };
+
+    private String[] resolveAllowedOrigins() {
+        if (allowedOriginsFromProps == null || allowedOriginsFromProps.length == 0) {
+            return DEFAULT_ALLOWED_ORIGINS;
+        }
+        String[] filtered = Arrays.stream(allowedOriginsFromProps)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toArray(String[]::new);
+        return filtered.length > 0 ? filtered : DEFAULT_ALLOWED_ORIGINS;
+    }
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        String[] originsToUse = (allowedOriginsFromProps != null && allowedOriginsFromProps.length > 0)
-                ? allowedOriginsFromProps
-                : DEFAULT_ALLOWED_ORIGINS;
+        String[] originsToUse = resolveAllowedOrigins();
 
         registry.addMapping("/api/**")
                 .allowedOriginPatterns(originsToUse)
@@ -57,9 +69,7 @@ public class CorsConfig implements WebMvcConfigurer {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        String[] originsToUse = (allowedOriginsFromProps != null && allowedOriginsFromProps.length > 0)
-                ? allowedOriginsFromProps
-                : DEFAULT_ALLOWED_ORIGINS;
+        String[] originsToUse = resolveAllowedOrigins();
 
         configuration.setAllowedOriginPatterns(List.of(originsToUse));
         configuration.setAllowedMethods(Arrays.asList(allowedMethods));
