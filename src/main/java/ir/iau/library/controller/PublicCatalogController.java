@@ -6,6 +6,7 @@ import ir.iau.library.service.BookService;
 import ir.iau.library.service.ImageContentType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
@@ -36,7 +37,9 @@ public class PublicCatalogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size,
             @RequestParam(defaultValue = "id,desc") String sort) {
-        Pageable pageable = PageableFactory.of(page, Math.min(size, 24), sort, SORTABLE, Sort.Direction.DESC);
+        Pageable pageable = "relevance".equalsIgnoreCase(sort)
+                ? PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 24))
+                : PageableFactory.of(page, Math.min(size, 24), sort, SORTABLE, Sort.Direction.DESC);
         return bookService.findPublic(q, subject, pageable).map(PublicBookDto::from);
     }
 

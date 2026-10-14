@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ master, main, feature/system-overhaul ]
   pull_request:
     branches: [ master, main ]
 

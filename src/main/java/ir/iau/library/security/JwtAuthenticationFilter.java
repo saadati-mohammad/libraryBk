@@ -36,10 +36,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+    private final AuthVersionService authVersionService;
     private final ObjectProvider<UserDetailsService> userDetailsServices;
 
-    public JwtAuthenticationFilter(JwtService jwtService, ObjectProvider<UserDetailsService> userDetailsServices) {
+    public JwtAuthenticationFilter(JwtService jwtService, AuthVersionService authVersionService,
+                                   ObjectProvider<UserDetailsService> userDetailsServices) {
         this.jwtService = jwtService;
+        this.authVersionService = authVersionService;
         this.userDetailsServices = userDetailsServices;
     }
 
@@ -57,6 +60,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Claims claims = jwtService.parse(token);
                 String username = claims.getSubject();
                 if (username != null) {
+                    Object versionClaim = claims.get("ver");
+                    long tokenVersion = versionClaim instanceof Number number ? number.longValue() : 0L;
+                    if (tokenVersion != authVersionService.currentVersion(username)) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     // Re-read the account on every request so deactivation and role changes
                     // take effect immediately instead of waiting for an old JWT to expire.
                     UserDetails account = userDetailsServices.getObject().loadUserByUsername(username);

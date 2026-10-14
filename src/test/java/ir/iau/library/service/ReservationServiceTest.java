@@ -16,8 +16,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +38,9 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class ReservationServiceTest {
+    private static final LocalDate BUSINESS_TODAY = LocalDate.of(2026, 10, 13);
+    private static final Clock BUSINESS_CLOCK = Clock.fixed(
+            Instant.parse("2026-10-12T20:45:00Z"), ZoneId.of("Asia/Tehran"));
 
     @Mock
     private ReservationRepository reservationRepository;
@@ -55,6 +62,7 @@ class ReservationServiceTest {
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(service, "clock", BUSINESS_CLOCK);
         activePerson = Person.builder()
                 .id(1L)
                 .firstName("Ada")
@@ -72,7 +80,7 @@ class ReservationServiceTest {
 
     @Test
     void createReservation_savesActiveReservation() {
-        LocalDate expiry = LocalDate.now().plusDays(7);
+        LocalDate expiry = BUSINESS_TODAY.plusDays(7);
         when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
         when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(activeBook));
         when(reservationRepository.findFirstByPersonAndBookAndStatus(
@@ -84,7 +92,7 @@ class ReservationServiceTest {
         ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
         verify(reservationRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.ACTIVE);
-        assertThat(captor.getValue().getReservationDate()).isEqualTo(LocalDate.now());
+        assertThat(captor.getValue().getReservationDate()).isEqualTo(BUSINESS_TODAY);
         assertThat(captor.getValue().getExpiryDate()).isEqualTo(expiry);
         assertThat(saved.getPerson()).isEqualTo(activePerson);
         assertThat(saved.getBook()).isEqualTo(activeBook);
@@ -102,7 +110,7 @@ class ReservationServiceTest {
         when(personRepository.findById(1L)).thenReturn(Optional.of(inactive));
         when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(activeBook));
 
-        assertThatThrownBy(() -> service.createReservation(1L, 2L, LocalDate.now().plusDays(1)))
+        assertThatThrownBy(() -> service.createReservation(1L, 2L, BUSINESS_TODAY.plusDays(1)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Person is not active");
 
@@ -116,7 +124,7 @@ class ReservationServiceTest {
         when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
         when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(deleted));
 
-        assertThatThrownBy(() -> service.createReservation(1L, 2L, LocalDate.now().plusDays(1)))
+        assertThatThrownBy(() -> service.createReservation(1L, 2L, BUSINESS_TODAY.plusDays(1)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Book is not active");
 
@@ -128,7 +136,7 @@ class ReservationServiceTest {
         when(personRepository.findById(1L)).thenReturn(Optional.of(activePerson));
         when(bookRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(activeBook));
 
-        assertThatThrownBy(() -> service.createReservation(1L, 2L, LocalDate.now().minusDays(1)))
+        assertThatThrownBy(() -> service.createReservation(1L, 2L, BUSINESS_TODAY.minusDays(1)))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(reservationRepository, never()).save(any());
@@ -142,7 +150,7 @@ class ReservationServiceTest {
                 activePerson, activeBook, ReservationStatus.ACTIVE))
                 .thenReturn(Optional.of(Reservation.builder().id(5L).build()));
 
-        assertThatThrownBy(() -> service.createReservation(1L, 2L, LocalDate.now().plusDays(1)))
+        assertThatThrownBy(() -> service.createReservation(1L, 2L, BUSINESS_TODAY.plusDays(1)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already exists");
 
@@ -153,7 +161,7 @@ class ReservationServiceTest {
     void createReservation_throwsWhenPersonMissing() {
         when(personRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.createReservation(99L, 2L, LocalDate.now().plusDays(1)))
+        assertThatThrownBy(() -> service.createReservation(99L, 2L, BUSINESS_TODAY.plusDays(1)))
                 .isInstanceOf(EntityNotFoundException.class);
 
         verify(reservationRepository, never()).save(any());

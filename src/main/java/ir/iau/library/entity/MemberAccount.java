@@ -26,6 +26,9 @@ public class MemberAccount {
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
 
+    @Column(name = "auth_version", nullable = false)
+    private long authVersion = 0;
+
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "person_id", nullable = false, unique = true)
     private Person person;

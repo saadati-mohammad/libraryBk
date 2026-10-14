@@ -37,4 +37,29 @@ class PhoneScannerSessionServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("410 GONE");
     }
+
+    @Test
+    void bindsRegisteredPhoneSessionToFirstAuthenticatedDevice() {
+        PhoneScannerSessionService service = new PhoneScannerSessionService();
+        var session = service.create();
+
+        service.submit(session.sessionId(), session.pairingToken(), "9780306406157", 42L);
+        assertThatThrownBy(() -> service.submit(session.sessionId(), session.pairingToken(), "9780306406157", 43L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        assertThatThrownBy(() -> service.submit(session.sessionId(), session.pairingToken(), "9780306406157", null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+    }
+
+    @Test
+    void boundsActiveSessionsPerStaffAccount() {
+        PhoneScannerSessionService service = new PhoneScannerSessionService();
+        for (int i = 0; i < 10; i++) service.create("busy-librarian");
+
+        assertThatThrownBy(() -> service.create("busy-librarian"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("429 TOO_MANY_REQUESTS");
+        assertThat(service.create("another-librarian")).isNotNull();
+    }
 }

@@ -100,7 +100,8 @@ public class PasswordResetService {
         if (rawToken == null || rawToken.length() < 32 || rawToken.length() > 200) {
             throw new EntityNotFoundException("لینک بازیابی نامعتبر یا منقضی شده است");
         }
-        PasswordResetToken reset = tokens.findByTokenHash(hash(rawToken))
+        // Serialize concurrent redemption attempts so a one-time token cannot reset twice.
+        PasswordResetToken reset = tokens.findByTokenHashForUpdate(hash(rawToken))
                 .orElseThrow(() -> new EntityNotFoundException("لینک بازیابی نامعتبر یا منقضی شده است"));
         Instant now = Instant.now();
         if (reset.getUsedAt() != null || !reset.getExpiresAt().isAfter(now)) {
@@ -109,10 +110,12 @@ public class PasswordResetService {
         var staff = staffAccounts.findByUsernameIgnoreCase(reset.getUsername()).orElse(null);
         if (staff != null) {
             staff.setPasswordHash(passwordEncoder.encode(newPassword));
+            staff.setAuthVersion(staff.getAuthVersion() + 1);
         } else {
             var member = memberAccounts.findByUsernameIgnoreCase(reset.getUsername())
                     .orElseThrow(() -> new EntityNotFoundException("لینک بازیابی نامعتبر یا منقضی شده است"));
             member.setPasswordHash(passwordEncoder.encode(newPassword));
+            member.setAuthVersion(member.getAuthVersion() + 1);
         }
         reset.setUsedAt(now);
         tokens.deleteByUsernameIgnoreCaseAndUsedAtIsNullAndIdNot(reset.getUsername(), reset.getId());

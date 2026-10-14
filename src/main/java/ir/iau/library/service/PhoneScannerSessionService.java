@@ -24,22 +24,38 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PhoneScannerSessionService {
     private static final Duration SESSION_LIFETIME = Duration.ofMinutes(10);
     private static final int MAX_PENDING_SCANS = 50;
+    private static final int MAX_ACTIVE_SESSIONS = 1_000;
+    private static final int MAX_SESSIONS_PER_STAFF = 10;
     private static final long DUPLICATE_WINDOW_MILLIS = 1_200;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
 
     public ScannerSessionDto create() {
+        return create(null);
+    }
+
+    public synchronized ScannerSessionDto create(String ownerUsername) {
         purgeExpired();
+        if (sessions.size() >= MAX_ACTIVE_SESSIONS
+                || ownerUsername != null && sessions.values().stream()
+                        .filter(session -> ownerUsername.equals(session.ownerUsername)).count() >= MAX_SESSIONS_PER_STAFF) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many active scanner sessions; close an existing session and try again");
+        }
         byte[] secret = new byte[32];
         random.nextBytes(secret);
         String id = UUID.randomUUID().toString();
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
         Instant expiresAt = Instant.now().plus(SESSION_LIFETIME);
-        sessions.put(id, new Session(token, expiresAt));
+        sessions.put(id, new Session(token, expiresAt, ownerUsername));
         return new ScannerSessionDto(id, token, expiresAt);
     }
 
     public ScannedBarcodeDto submit(String id, String token, String rawBarcode) {
+        return submit(id, token, rawBarcode, null);
+    }
+
+    public ScannedBarcodeDto submit(String id, String token, String rawBarcode, Long deviceId) {
         Session session = requireSession(id);
         if (!constantTimeEquals(session.token, token)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid scanner pairing token");
@@ -49,6 +65,10 @@ public class PhoneScannerSessionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only valid ISBN-10 or ISBN-13 barcodes are accepted");
         }
         synchronized (session) {
+            if (session.deviceId != null && !session.deviceId.equals(deviceId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This scanner session is bound to another device");
+            }
+            if (deviceId != null && session.deviceId == null) session.deviceId = deviceId;
             long now = System.currentTimeMillis();
             if (barcode.equals(session.lastBarcode) && now - session.lastScanMillis < DUPLICATE_WINDOW_MILLIS) {
                 return new ScannedBarcodeDto(session.sequence, barcode, Instant.ofEpochMilli(session.lastScanMillis));
@@ -66,7 +86,12 @@ public class PhoneScannerSessionService {
     }
 
     public List<ScannedBarcodeDto> poll(String id, long afterSequence) {
+        return poll(id, afterSequence, null);
+    }
+
+    public List<ScannedBarcodeDto> poll(String id, long afterSequence, String ownerUsername) {
         Session session = requireSession(id);
+        requireOwner(session, ownerUsername);
         synchronized (session) {
             List<ScannedBarcodeDto> scans = new ArrayList<>();
             while (!session.pending.isEmpty()) {
@@ -83,6 +108,18 @@ public class PhoneScannerSessionService {
 
     public void close(String id) {
         sessions.remove(id);
+    }
+
+    public void close(String id, String ownerUsername) {
+        Session session = requireSession(id);
+        requireOwner(session, ownerUsername);
+        sessions.remove(id, session);
+    }
+
+    private void requireOwner(Session session, String ownerUsername) {
+        if (session.ownerUsername != null && !session.ownerUsername.equals(ownerUsername)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Scanner session belongs to another staff account");
+        }
     }
 
     private Session requireSession(String id) {
@@ -107,14 +144,17 @@ public class PhoneScannerSessionService {
     private static final class Session {
         private final String token;
         private final Instant expiresAt;
+        private final String ownerUsername;
         private final ArrayDeque<ScannedBarcodeDto> pending = new ArrayDeque<>();
         private long sequence;
         private String lastBarcode;
         private long lastScanMillis;
+        private Long deviceId;
 
-        private Session(String token, Instant expiresAt) {
+        private Session(String token, Instant expiresAt, String ownerUsername) {
             this.token = token;
             this.expiresAt = expiresAt;
+            this.ownerUsername = ownerUsername;
         }
     }
 }

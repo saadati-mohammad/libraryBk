@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,9 +27,8 @@ import java.util.List;
  * being the sender or the recipient of that message. Before this, any authenticated caller
  * could download, inspect or delete any other user's attachment by id.
  *
- * <p>Only files with no owning message at all (uploaded without a {@code messageId}) remain
- * readable by any authenticated caller: there is no ownership row to enforce against, and
- * denying them would make the optional-message upload path unusable.
+ * <p>Unattached or orphaned files fail closed. New uploads must reference a real active
+ * conversation; the API does not provide a public orphan-recovery path.
  */
 @RestController
 @RequestMapping("/api/v1/files")
@@ -40,16 +40,16 @@ public class FileController {
 
     /** Fails closed (403) when the file is attached to a message the caller is not part of. */
     private void requireAttachmentAccess(Long fileId, String caller) {
-        fileService.findAttachmentOwnership(fileId).ifPresent(ownership ->
-                AccessControl.requireParticipant(caller, ownership.sender(), ownership.recipient(),
-                        "file " + fileId));
+        var ownership = fileService.findAttachmentOwnership(fileId)
+                .orElseThrow(() -> new AccessDeniedException("Attachment has no authorized owner"));
+        AccessControl.requireParticipant(caller, ownership.sender(), ownership.recipient(), "file " + fileId);
     }
 
     /** Fails closed (403) when the caller does not participate in the message. */
     private void requireMessageAccess(Long messageId, String caller) {
-        fileService.findMessageOwnership(messageId).ifPresent(ownership ->
-                AccessControl.requireParticipant(caller, ownership.sender(), ownership.recipient(),
-                        "message " + messageId));
+        var ownership = fileService.findMessageOwnership(messageId)
+                .orElseThrow(() -> new AccessDeniedException("Message not found"));
+        AccessControl.requireParticipant(caller, ownership.sender(), ownership.recipient(), "message " + messageId);
     }
 
     /**
@@ -89,7 +89,7 @@ public class FileController {
      *
      * Form Data:
      * - file: [فایل]
-     * - messageId: 123 (اختیاری)
+     * - messageId: 123 (اجباری؛ پیام باید فعال باشد)
      *
      * مثال پاسخ:
      * {
@@ -112,8 +112,8 @@ public class FileController {
             @Parameter(description = "فایل برای آپلود", required = true)
             @RequestParam("file") MultipartFile file,
 
-            @Parameter(description = "شناسه پیام (اختیاری)")
-            @RequestParam(value = "messageId", required = false) Long messageId) {
+            @Parameter(description = "شناسه پیام فعال", required = true)
+            @RequestParam(value = "messageId") Long messageId) {
 
         // Attaching a file to someone else's message would make it visible to that
         // conversation, so the uploader must already participate in the target message.

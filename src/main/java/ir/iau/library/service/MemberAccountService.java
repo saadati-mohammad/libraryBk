@@ -18,6 +18,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.time.Clock;
+import java.time.LocalDate;
 
 @Service
 @Transactional
@@ -27,6 +29,7 @@ public class MemberAccountService {
     private final BookLoanRepository loans;
     private final ReservationRepository reservations;
     private final ReservationService reservationService;
+    private final Clock clock;
 
     public MemberProfileDto profile(String username) { return MemberProfileDto.from(member(username).getPerson()); }
 
@@ -52,7 +55,7 @@ public class MemberAccountService {
     public MemberReservationDto reserve(String username, Long bookId) {
         Person person = member(username).getPerson();
         return MemberReservationDto.from(reservationService.createReservation(person.getId(), bookId,
-                java.time.LocalDate.now().plusDays(14)));
+                LocalDate.now(clock).plusDays(14)));
     }
 
     public void cancelReservation(String username, Long reservationId) {

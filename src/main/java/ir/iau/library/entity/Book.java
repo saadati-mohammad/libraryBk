@@ -2,6 +2,7 @@ package ir.iau.library.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import ir.iau.library.dto.BookFilterDto;
+import ir.iau.library.service.Isbn;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -52,6 +53,13 @@ public class Book {
     @AssertTrue(message = "شابک ۱۰ یا ۱۳ رقمی الزامی است")
     public boolean isIsbnIdentifierPresent() {
         return (isbn10 != null && !isbn10.isBlank()) || (isbn13 != null && !isbn13.isBlank());
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "شابک واردشده معتبر نیست")
+    public boolean isIsbnIdentifierValid() {
+        return (isbn10 == null || isbn10.isBlank() || Isbn.isValid(isbn10))
+                && (isbn13 == null || isbn13.isBlank() || Isbn.isValid(isbn13));
     }
     @Column(length = 2000)
     private String description;

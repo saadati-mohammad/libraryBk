@@ -68,6 +68,17 @@ public class FileService {
                 return ApiResponse.error(validationError);
             }
 
+            // Every attachment must have an active conversation owner. Reject before writing
+            // bytes so invalid/missing message IDs cannot create globally-readable orphans.
+            if (messageId == null) {
+                return ApiResponse.error("An active message is required for an attachment");
+            }
+            Message owningMessage = messageRepository.findByIdAndIsActiveTrue(messageId)
+                    .orElse(null);
+            if (owningMessage == null) {
+                return ApiResponse.error("Active message not found");
+            }
+
             // ایجاد دایرکتوری آپلود
             Path uploadPath = Paths.get(uploadDir);
             if (!Files.exists(uploadPath)) {
@@ -90,11 +101,8 @@ public class FileService {
                     .filePath(targetLocation.toString())
                     .uploadStatus("COMPLETED");
 
-            // اتصال به پیام (اختیاری)
-            if (messageId != null) {
-                messageRepository.findByIdAndIsActiveTrue(messageId)
-                        .ifPresent(fileBuilder::message);
-            }
+            // Required association established before file creation.
+            fileBuilder.message(owningMessage);
 
             FileAttachment savedFile = fileAttachmentRepository.save(fileBuilder.build());
             FileAttachmentDto fileDto = messageMapper.toDto(savedFile);

@@ -152,6 +152,16 @@ class MessageAuthorizationTest {
     }
 
     @Test
+    void recipientCannotEditTheSendersMessage() throws Exception {
+        mockMvc.perform(put("/api/messages/" + messageId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hijacked by recipient\"}")
+                        .header("Authorization", "Bearer " + tokenFor(BOB)))
+                .andExpect(status().isForbidden());
+        assertThat(messageRepository.findById(messageId).orElseThrow().getMessage()).isEqualTo(SECRET_BODY);
+    }
+
+    @Test
     void nonParticipantCannotDeleteAMessage() throws Exception {
         MvcResult res = mockMvc.perform(delete("/api/messages/" + messageId)
                         .header("Authorization", "Bearer " + tokenFor(CAROL)))
@@ -159,6 +169,14 @@ class MessageAuthorizationTest {
                 .andReturn();
 
         assertDeniedEnvelope(res);
+    }
+
+    @Test
+    void recipientCannotDeleteTheSendersMessage() throws Exception {
+        mockMvc.perform(delete("/api/messages/" + messageId)
+                        .header("Authorization", "Bearer " + tokenFor(BOB)))
+                .andExpect(status().isForbidden());
+        assertThat(messageRepository.findById(messageId).orElseThrow().getIsActive()).isTrue();
     }
 
     @Test
@@ -211,6 +229,27 @@ class MessageAuthorizationTest {
 
         assertDeniedEnvelope(mockMvc.perform(get("/api/v1/files/message/" + messageId)
                         .header("Authorization", "Bearer " + tokenFor(CAROL)))
+                .andExpect(status().isForbidden())
+                .andReturn());
+    }
+
+    @Test
+    void unattachedOrphanAttachmentIsDeniedToEveryOrdinaryUser() throws Exception {
+        FileAttachment orphan = fileAttachmentRepository.save(FileAttachment.builder()
+                .fileName("orphan.txt")
+                .originalFileName("orphan.txt")
+                .contentType("text/plain")
+                .fileSize(1L)
+                .filePath("/tmp/orphan-not-on-disk.txt")
+                .uploadStatus("COMPLETED")
+                .build());
+
+        assertDeniedEnvelope(mockMvc.perform(get("/api/v1/files/info/" + orphan.getId())
+                        .header("Authorization", "Bearer " + tokenFor(ALICE)))
+                .andExpect(status().isForbidden())
+                .andReturn());
+        assertDeniedEnvelope(mockMvc.perform(delete("/api/v1/files/delete/" + orphan.getId())
+                        .header("Authorization", "Bearer " + tokenFor(BOB)))
                 .andExpect(status().isForbidden())
                 .andReturn());
     }

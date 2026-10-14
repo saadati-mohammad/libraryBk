@@ -18,4 +18,19 @@ class IsbnTest {
         assertThat(Isbn.isValid("9780306406158")).isFalse();
         assertThat(Isbn.isValid("1234567890123")).isFalse();
     }
+
+    @Test
+    void normalizesPersianAndArabicIndicDigitsBeforeValidation() {
+        assertThat(Isbn.normalize("۹۷۸-۰۳۰۶۴۰۶۱۵۷")).isEqualTo("9780306406157");
+        assertThat(Isbn.normalize("٩٧٨ ٠٣٠٦٤٠٦١٥٧")).isEqualTo("9780306406157");
+        assertThat(Isbn.isValid("۹۷۸-۰۳۰۶۴۰۶۱۵۷")).isTrue();
+    }
+
+    @Test
+    void resolvesTheEquivalentTenAndThirteenDigitIdentifiers() {
+        assertThat(Isbn.toIsbn10("9780306406157")).isEqualTo("0306406152");
+        assertThat(Isbn.toIsbn13("0-306-40615-2")).isEqualTo("9780306406157");
+        assertThat(Isbn.toIsbn10("9791234567896")).isEmpty();
+        assertThat(Isbn.toIsbn13("1234567890")).isEmpty();
+    }
 }

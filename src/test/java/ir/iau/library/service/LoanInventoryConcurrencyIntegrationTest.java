@@ -38,7 +38,7 @@ class LoanInventoryConcurrencyIntegrationTest {
         Book book = bookRepository.saveAndFlush(Book.builder()
                 .title("Concurrency test " + unique)
                 .author("Test author")
-                .isbn10(unique.substring(0, 10))
+                .isbn10("0306406152")
                 .subject("Test")
                 .copyCount(1)
                 .active(true)

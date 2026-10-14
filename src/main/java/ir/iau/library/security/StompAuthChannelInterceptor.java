@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 import java.security.Principal;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import ir.iau.library.security.AuthVersionService;
 
 /**
  * Authenticates STOMP frames so the WebSocket layer never trusts a client-supplied username.
@@ -44,9 +45,12 @@ import java.util.regex.Pattern;
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private static final Pattern USER_DESTINATION = Pattern.compile("^/topic/user/([^/]+)$");
+    private static final Pattern APP_DESTINATION = Pattern.compile(
+            "^/app/chat\\.(send|edit|delete|markRead|typing|addUser|removeUser)$");
 
     private final JwtService jwtService;
     private final ObjectProvider<UserDetailsService> userDetailsServices;
+    private final AuthVersionService authVersionService;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -78,8 +82,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             }
             UserDetails account = userDetailsServices.getObject().loadUserByUsername(username);
             if (!account.isEnabled()) throw new JwtAuthenticationException("Account is disabled");
+            long tokenVersion = claims.get("ver", Number.class) == null ? 0L
+                    : claims.get("ver", Number.class).longValue();
+            if (tokenVersion != authVersionService.currentVersion(username)) {
+                throw new JwtAuthenticationException("Token credentials have been revoked");
+            }
             Authentication authentication = new UsernamePasswordAuthenticationToken(
                     account.getUsername(), null, account.getAuthorities());
+            ((UsernamePasswordAuthenticationToken) authentication).setDetails(tokenVersion);
             accessor.setUser(authentication);
             log.debug("Authenticated STOMP CONNECT for principal '{}'", account.getUsername());
         } catch (JwtException | IllegalArgumentException | UsernameNotFoundException ex) {
@@ -98,7 +108,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         if (principal == null) {
             throw new JwtAuthenticationException("Unauthenticated SEND is not allowed");
         }
-        verifyCurrentAccount(principal.getName());
+        verifyCurrentAccount(principal.getName(), currentTokenVersion(principal));
+        String destination = accessor.getDestination();
+        if (destination == null || !APP_DESTINATION.matcher(destination).matches()) {
+            throw new JwtAuthenticationException("SEND destination is not permitted");
+        }
         Object payload = message.getPayload();
         if (payload instanceof WebSocketMessage wsMessage) {
             String claimedSender = wsMessage.getSender();
@@ -121,7 +135,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         if (principal == null) {
             throw new JwtAuthenticationException("Unauthenticated SUBSCRIBE is not allowed");
         }
-        verifyCurrentAccount(principal.getName());
+        verifyCurrentAccount(principal.getName(), currentTokenVersion(principal));
         String destination = accessor.getDestination();
         if (destination == null) {
             throw new JwtAuthenticationException("SUBSCRIBE without destination");
@@ -148,8 +162,19 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         return token.isEmpty() ? null : token;
     }
 
-    private void verifyCurrentAccount(String username) {
+    private long currentTokenVersion(Principal principal) {
+        if (principal instanceof Authentication authentication
+                && authentication.getDetails() instanceof Number version) {
+            return version.longValue();
+        }
+        throw new JwtAuthenticationException("Authenticated session has no credential version");
+    }
+
+    private void verifyCurrentAccount(String username, long tokenVersion) {
         try {
+            if (authVersionService.currentVersion(username) != tokenVersion) {
+                throw new JwtAuthenticationException("Token credentials have been revoked");
+            }
             UserDetails account = userDetailsServices.getObject().loadUserByUsername(username);
             if (!account.isEnabled()) throw new JwtAuthenticationException("Account is disabled");
         } catch (UsernameNotFoundException ex) {

@@ -69,7 +69,7 @@ class BookSoftDeleteIntegrationTest {
     }
 
     private long createBook(String token, String title) throws Exception {
-        String isbn = "sd-" + UUID.randomUUID().toString().substring(0, 8);
+        String isbn = "0306406152";
         MvcResult res = mockMvc.perform(multipart("/api/book")
                         .file(jsonPart("book", "{\"title\":\"" + title + "\",\"author\":\"Author\","
                                 + "\"isbn10\":\"" + isbn + "\",\"subject\":\"Subject\","

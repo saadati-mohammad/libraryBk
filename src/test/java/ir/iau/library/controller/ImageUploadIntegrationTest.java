@@ -75,7 +75,7 @@ class ImageUploadIntegrationTest {
     @Test
     void bookCoverLargerThanTheOldAuditColumnIsAcceptedAndStoredWhole() throws Exception {
         String token = login();
-        String isbn = "img-" + UUID.randomUUID().toString().substring(0, 8);
+        String isbn = "0306406152";
         String json = "{\"title\":\"Covered Book\",\"author\":\"Author\",\"isbn10\":\"" + isbn + "\","
                 + "\"subject\":\"Subject\",\"active\":true}";
 
@@ -126,7 +126,7 @@ class ImageUploadIntegrationTest {
     @Test
     void bookCoverCanAlsoBeReplacedOnUpdate() throws Exception {
         String token = login();
-        String isbn = "imgu-" + UUID.randomUUID().toString().substring(0, 8);
+        String isbn = "0306406152";
         String json = "{\"title\":\"Covered Book 2\",\"author\":\"Author\",\"isbn10\":\"" + isbn + "\","
                 + "\"subject\":\"Subject\",\"active\":true}";
 

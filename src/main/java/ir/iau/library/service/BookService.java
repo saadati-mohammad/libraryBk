@@ -5,6 +5,7 @@ import ir.iau.library.dto.PublicCategoryDto;
 import ir.iau.library.entity.Book;
 import ir.iau.library.repository.BookRepository;
 import ir.iau.library.specification.BookSpecification;
+import ir.iau.library.util.PersianSearchNormalizer;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,23 +33,39 @@ public class BookService {
 
     /** Public search over safe discovery fields. Internal shelf/location fields are never filters here. */
     public Page<Book> findPublic(String query, String subject, Pageable pageable) {
-        String term = query == null ? "" : query.strip().toLowerCase();
-        String category = subject == null ? "" : subject.strip().toLowerCase();
+        String term = PersianSearchNormalizer.normalize(query);
+        String category = PersianSearchNormalizer.normalize(subject);
         Specification<Book> spec = (root, criteria, cb) -> {
             Predicate active = cb.isTrue(root.get("active"));
             Predicate search = cb.conjunction();
             if (!term.isBlank()) {
                 String pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
                 search = cb.or(
-                        cb.like(cb.lower(root.get("title")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("author")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("publisher")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("subject")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("isbn10")), pattern, '\\'),
-                        cb.like(cb.lower(root.get("isbn13")), pattern, '\\'));
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("title")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("author")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("publisher")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("subject")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("isbn10")), pattern, '\\'),
+                        cb.like(PersianSearchNormalizer.normalize(cb, root.get("isbn13")), pattern, '\\'));
+                if (pageable.getSort().isUnsorted()) {
+                    String prefix = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+                    var title = PersianSearchNormalizer.normalize(cb, root.get("title"));
+                    var author = PersianSearchNormalizer.normalize(cb, root.get("author"));
+                    var subjectField = PersianSearchNormalizer.normalize(cb, root.get("subject"));
+                    var relevance = cb.<Integer>selectCase()
+                            .when(cb.equal(title, term), 0)
+                            .when(cb.like(title, prefix, '\\'), 1)
+                            .when(cb.like(author, pattern, '\\'), 2)
+                            .when(cb.like(subjectField, pattern, '\\'), 3)
+                            .otherwise(4);
+                    criteria.orderBy(cb.asc(relevance), cb.desc(root.get("id")));
+                }
             }
             Predicate categoryFilter = category.isBlank() ? cb.conjunction()
-                    : cb.equal(cb.lower(root.get("subject")), category);
+                    : cb.equal(PersianSearchNormalizer.normalize(cb, root.get("subject")), category);
+            if (term.isBlank() && pageable.getSort().isUnsorted()) {
+                criteria.orderBy(cb.desc(root.get("id")));
+            }
             return cb.and(active, search, categoryFilter);
         };
         return bookRepository.findAll(spec, pageable);
@@ -66,6 +83,7 @@ public class BookService {
         // back-reference collection are always server-controlled.
         book.setId(null);
         book.setLoans(null);
+        normalizeBookIsbns(book);
         // A book created without an explicit flag is an ACTIVE book. A null flag used to be
         // persisted verbatim, which made the record invisible to ?active=true listings,
         // uncounted on the dashboard and impossible to lend or reserve (the business guards
@@ -90,6 +108,7 @@ public class BookService {
         book.setPublisher(bookDetails.getPublisher());
         book.setIsbn10(bookDetails.getIsbn10());
         book.setIsbn13(bookDetails.getIsbn13());
+        normalizeBookIsbns(book);
         book.setDescription(bookDetails.getDescription()); // اضافه شده
         book.setDeweyDecimal(bookDetails.getDeweyDecimal());
         book.setCongressClassification(bookDetails.getCongressClassification());
@@ -158,5 +177,19 @@ public class BookService {
         return bookRepository.findById(id)
                 .map(Book::getBookCoverFile)
                 .filter(bytes -> bytes != null && bytes.length > 0);
+    }
+
+    /** Canonicalize identifiers on every catalog write so search, deduplication and scanner paths agree. */
+    public static void normalizeBookIsbns(Book book) {
+        String isbn10 = Isbn.normalize(book.getIsbn10());
+        String isbn13 = Isbn.normalize(book.getIsbn13());
+        if (!isbn10.isEmpty() && !Isbn.isValid(isbn10)) {
+            throw new IllegalArgumentException("شابک ۱۰ رقمی معتبر نیست");
+        }
+        if (!isbn13.isEmpty() && !Isbn.isValid(isbn13)) {
+            throw new IllegalArgumentException("شابک ۱۳ رقمی معتبر نیست");
+        }
+        book.setIsbn10(isbn10.isEmpty() ? null : isbn10);
+        book.setIsbn13(isbn13.isEmpty() ? null : isbn13);
     }
 }

@@ -3,6 +3,7 @@ package ir.iau.library.service;
 import ir.iau.library.dto.ApiResponse;
 import ir.iau.library.dto.FileAttachmentDto;
 import ir.iau.library.entity.FileAttachment;
+import ir.iau.library.entity.Message;
 import ir.iau.library.repository.FileAttachmentRepository;
 import ir.iau.library.repository.MessageRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,14 +73,33 @@ class FileServiceTest {
     void uploadStoresValidFileInsideUploadRoot() {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "report.png", "image/png", "data".getBytes());
+        Message message = Message.builder().sender("alice").recipient("bob").isActive(true).build();
+        when(messageRepository.findByIdAndIsActiveTrue(10L)).thenReturn(Optional.of(message));
 
-        ApiResponse<FileAttachmentDto> response = fileService.uploadFile(file, null);
+        ApiResponse<FileAttachmentDto> response = fileService.uploadFile(file, 10L);
 
         assertThat(response.isSuccess()).isTrue();
         FileAttachment saved = captureSaved();
         assertThat(saved.getFileName()).doesNotContain("/", "\\", "..");
+        assertThat(saved.getMessage()).isSameAs(message);
         assertThat(Path.of(uploadRoot.toString(), saved.getFileName()).normalize())
                 .startsWith(uploadRoot.toAbsolutePath().normalize());
+    }
+
+    @Test
+    void uploadWithoutOwningMessageDoesNotCreateAnOrphanOrWriteFile() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "report.png", "image/png", "data".getBytes());
+
+        ApiResponse<FileAttachmentDto> response = fileService.uploadFile(file, null);
+
+        assertThat(response.isSuccess()).isFalse();
+        verify(fileAttachmentRepository, never()).save(any(FileAttachment.class));
+        try (var files = Files.list(uploadRoot)) {
+            assertThat(files).isEmpty();
+        } catch (java.io.IOException exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     @Test

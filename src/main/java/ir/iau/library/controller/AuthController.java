@@ -9,6 +9,7 @@ import ir.iau.library.service.PasswordResetService;
 import ir.iau.library.dto.ForgotPasswordRequest;
 import ir.iau.library.dto.ResetPasswordRequest;
 import ir.iau.library.security.JwtService;
+import ir.iau.library.security.AuthVersionService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -33,14 +34,17 @@ public class AuthController {
     private final JwtService jwtService;
     private final MemberRegistrationService memberRegistrationService;
     private final PasswordResetService passwordResetService;
+    private final AuthVersionService authVersionService;
 
     public AuthController(AuthenticationManager authenticationManager, JwtService jwtService,
                           MemberRegistrationService memberRegistrationService,
-                          PasswordResetService passwordResetService) {
+                          PasswordResetService passwordResetService,
+                          AuthVersionService authVersionService) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.memberRegistrationService = memberRegistrationService;
         this.passwordResetService = passwordResetService;
+        this.authVersionService = authVersionService;
     }
 
     @org.springframework.web.bind.annotation.PostMapping("/register")
@@ -67,7 +71,8 @@ public class AuthController {
                 .findFirst()
                 .orElse("ADMIN");
 
-        String token = jwtService.generateToken(authentication.getName(), role);
+        String token = jwtService.generateToken(authentication.getName(), role,
+                authVersionService.currentVersion(authentication.getName()));
         return ResponseEntity.ok(new LoginResponseDto(
                 token, authentication.getName(), role, jwtService.getExpirationSeconds()));
     }

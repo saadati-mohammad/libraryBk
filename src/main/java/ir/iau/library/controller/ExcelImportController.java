@@ -1,7 +1,8 @@
 package ir.iau.library.controller;
 
-import ir.iau.library.dto.BookFilterDto;
+import ir.iau.library.dto.BookImportResult;
 import ir.iau.library.dto.PersonFilterDto;
+import ir.iau.library.dto.PersonImportResult;
 import ir.iau.library.service.ExcelImportService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,11 +32,17 @@ public class ExcelImportController {
     @PostMapping("/books")
     public ResponseEntity<Map<String, Object>> importBooks(@RequestPart("file") MultipartFile file) {
         try {
-            List<BookFilterDto> books = excelImportService.importBooksFromExcel(file);
+            BookImportResult result = excelImportService.importBooksFromExcel(file);
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "imported", books.size(),
-                    "message", "Books successfully imported."));
+                    "imported", result.imported(),
+                    "eligible", result.eligible(),
+                    "totalRows", result.totalRows(),
+                    "skippedDuplicates", result.skippedDuplicates(),
+                    "duplicateRows", result.duplicateRows(),
+                    "skippedInvalid", result.skippedInvalid(),
+                    "invalidRows", result.invalidRows(),
+                    "message", "Books imported; duplicate and invalid rows were skipped without overwriting existing records."));
         } catch (Exception e) {
             // Full detail stays in the server log; the client gets a generic message.
             log.error("Error importing books from Excel: {}", e.getMessage(), e);
@@ -46,20 +53,68 @@ public class ExcelImportController {
         }
     }
 
+    @PostMapping("/books/preview")
+    public ResponseEntity<Map<String, Object>> previewBooks(@RequestPart("file") MultipartFile file) {
+        try {
+            BookImportResult result = excelImportService.previewBooksFromExcel(file);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "preview", true,
+                    "totalRows", result.totalRows(),
+                    "eligible", result.eligible(),
+                    "skippedDuplicates", result.skippedDuplicates(),
+                    "duplicateRows", result.duplicateRows(),
+                    "skippedInvalid", result.skippedInvalid(),
+                    "invalidRows", result.invalidRows()));
+        } catch (Exception e) {
+            log.warn("Book import preview rejected: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                    .body(Map.of("success", false, "message", e.getMessage() == null
+                            ? "پیش‌نمایش فایل ممکن نشد؛ قالب و محدودیت‌های فایل را بررسی کنید." : e.getMessage()));
+        }
+    }
+
     @PostMapping("/persons")
     public ResponseEntity<Map<String, Object>> importPersons(@RequestPart("file") MultipartFile file) {
         try {
-            List<PersonFilterDto> persons = excelImportService.importPersonsFromExcel(file);
+            PersonImportResult result = excelImportService.importPersonsFromExcel(file);
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "imported", persons.size(),
-                    "message", "Persons successfully imported."));
+                    "imported", result.imported(),
+                    "eligible", result.eligible(),
+                    "totalRows", result.totalRows(),
+                    "skippedDuplicates", result.skippedDuplicates(),
+                    "duplicateRows", result.duplicateRows(),
+                    "skippedInvalid", result.skippedInvalid(),
+                    "invalidRows", result.invalidRows(),
+                    "message", "Persons imported; duplicate and invalid rows were skipped."));
         } catch (Exception e) {
             log.error("Error importing persons from Excel: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                     .body(Map.of(
                             "success", false,
                             "message", "Error importing persons. Check the file format and try again."));
+        }
+    }
+
+    @PostMapping("/persons/preview")
+    public ResponseEntity<Map<String, Object>> previewPersons(@RequestPart("file") MultipartFile file) {
+        try {
+            PersonImportResult result = excelImportService.previewPersonsFromExcel(file);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "preview", true,
+                    "totalRows", result.totalRows(),
+                    "eligible", result.eligible(),
+                    "skippedDuplicates", result.skippedDuplicates(),
+                    "duplicateRows", result.duplicateRows(),
+                    "skippedInvalid", result.skippedInvalid(),
+                    "invalidRows", result.invalidRows()));
+        } catch (Exception e) {
+            log.warn("Person import preview rejected: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                    .body(Map.of("success", false, "message", e.getMessage() == null
+                            ? "پیش‌نمایش فایل اعضا ممکن نشد؛ قالب و محدودیت‌های فایل را بررسی کنید." : e.getMessage()));
         }
     }
 }

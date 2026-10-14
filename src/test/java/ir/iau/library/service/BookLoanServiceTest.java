@@ -17,8 +17,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +40,9 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class BookLoanServiceTest {
+    private static final LocalDate BUSINESS_TODAY = LocalDate.of(2026, 10, 13);
+    private static final Clock BUSINESS_CLOCK = Clock.fixed(
+            Instant.parse("2026-10-12T20:45:00Z"), ZoneId.of("Asia/Tehran"));
 
     @Mock
     private BookLoanRepository loanRepository;
@@ -54,6 +61,7 @@ class BookLoanServiceTest {
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(service, "clock", BUSINESS_CLOCK);
         activePerson = Person.builder()
                 .id(1L)
                 .firstName("Ada")
@@ -90,8 +98,8 @@ class BookLoanServiceTest {
         BookLoan saved = captor.getValue();
 
         assertThat(saved.getStatus()).isEqualTo(LoanStatus.ON_LOAN);
-        assertThat(saved.getLoanDate()).isEqualTo(LocalDate.now());
-        assertThat(saved.getDueDate()).isEqualTo(LocalDate.now().plusDays(14));
+        assertThat(saved.getLoanDate()).isEqualTo(BUSINESS_TODAY);
+        assertThat(saved.getDueDate()).isEqualTo(BUSINESS_TODAY.plusDays(14));
         assertThat(saved.getReturnDate()).isNull();
         assertThat(saved.getNotes()).isEqualTo("first edition");
 
@@ -254,8 +262,8 @@ class BookLoanServiceTest {
                 .id(9L)
                 .person(activePerson)
                 .book(book)
-                .loanDate(LocalDate.now().minusDays(3))
-                .dueDate(LocalDate.now().plusDays(11))
+                .loanDate(BUSINESS_TODAY.minusDays(3))
+                .dueDate(BUSINESS_TODAY.plusDays(11))
                 .status(LoanStatus.ON_LOAN)
                 .build();
 
@@ -269,9 +277,9 @@ class BookLoanServiceTest {
         BookLoan saved = captor.getValue();
 
         assertThat(saved.getStatus()).isEqualTo(LoanStatus.RETURNED);
-        assertThat(saved.getReturnDate()).isEqualTo(LocalDate.now());
+        assertThat(saved.getReturnDate()).isEqualTo(BUSINESS_TODAY);
         assertThat(result.getStatus()).isEqualTo(LoanStatus.RETURNED);
-        assertThat(result.getReturnDate()).isEqualTo(LocalDate.now());
+        assertThat(result.getReturnDate()).isEqualTo(BUSINESS_TODAY);
     }
 
     @Test
@@ -281,7 +289,7 @@ class BookLoanServiceTest {
                 .person(activePerson)
                 .book(book)
                 .status(LoanStatus.RETURNED)
-                .returnDate(LocalDate.now().minusDays(1))
+                .returnDate(BUSINESS_TODAY.minusDays(1))
                 .build();
 
         when(loanRepository.findById(9L)).thenReturn(Optional.of(returned));
@@ -309,12 +317,12 @@ class BookLoanServiceTest {
                 .id(9L)
                 .person(activePerson)
                 .book(book)
-                .loanDate(LocalDate.now().minusDays(20))
-                .dueDate(LocalDate.now().minusDays(6))
+                .loanDate(BUSINESS_TODAY.minusDays(20))
+                .dueDate(BUSINESS_TODAY.minusDays(6))
                 .status(LoanStatus.ON_LOAN)
                 .build();
 
-        when(loanRepository.findByStatusAndDueDateBefore(LoanStatus.ON_LOAN, LocalDate.now()))
+        when(loanRepository.findByStatusAndDueDateBefore(LoanStatus.ON_LOAN, BUSINESS_TODAY))
                 .thenReturn(List.of(overdue));
         when(loanRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -327,7 +335,7 @@ class BookLoanServiceTest {
 
     @Test
     void markOverdueLoans_isNoOpWhenNoneArePastDue() {
-        when(loanRepository.findByStatusAndDueDateBefore(LoanStatus.ON_LOAN, LocalDate.now()))
+        when(loanRepository.findByStatusAndDueDateBefore(LoanStatus.ON_LOAN, BUSINESS_TODAY))
                 .thenReturn(List.of());
 
         int updated = service.markOverdueLoans();

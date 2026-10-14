@@ -72,7 +72,7 @@ class MemberAccountIntegrationTest {
                 String.format("%010d", Math.abs(System.nanoTime() % 1_000_000_000L)));
         String memberTwo = registerAndLogin("member-b-" + suffix + "@example.test",
                 String.format("%010d", Math.abs((System.nanoTime() + 9) % 1_000_000_000L)));
-        String isbn = "ac-" + suffix;
+        String isbn = "0306406152";
         MockMultipartFile bookPart = new MockMultipartFile("book", "book.json", MediaType.APPLICATION_JSON_VALUE,
                 ("{\"title\":\"Member Reservation " + suffix + "\",\"author\":\"Author\",\"isbn10\":\""
                         + isbn + "\",\"subject\":\"Member Test\",\"copyCount\":1}").getBytes(StandardCharsets.UTF_8));

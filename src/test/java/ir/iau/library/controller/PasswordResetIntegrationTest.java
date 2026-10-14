@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
@@ -47,6 +48,7 @@ class PasswordResetIntegrationTest {
                                 "email", email, "nationalId", nationalId, "password", "old-member-password-123"))))
                 .andExpect(status().isCreated());
 
+        String preResetToken = login(email, "old-member-password-123");
         mvc.perform(post("/api/auth/forgot-password").contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(Map.of("email", email))))
                 .andExpect(status().isAccepted());
@@ -64,6 +66,8 @@ class PasswordResetIntegrationTest {
         mvc.perform(post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(Map.of("token", rawToken, "password", "new-member-password-456"))))
                 .andExpect(status().isOk());
+        mvc.perform(get("/api/account/me").header("Authorization", "Bearer " + preResetToken))
+                .andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(Map.of("username", email, "password", "old-member-password-123"))))
                 .andExpect(status().isUnauthorized());

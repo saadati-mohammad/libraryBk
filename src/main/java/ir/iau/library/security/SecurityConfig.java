@@ -16,6 +16,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.io.IOException;
@@ -33,14 +34,17 @@ import java.io.IOException;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final AuthRateLimitFilter authRateLimitFilter;
     private final CorsConfigurationSource corsConfigurationSource;
     private final ObjectMapper objectMapper;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
+            AuthRateLimitFilter authRateLimitFilter,
             CorsConfigurationSource corsConfigurationSource,
             ObjectMapper objectMapper) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.authRateLimitFilter = authRateLimitFilter;
         this.corsConfigurationSource = corsConfigurationSource;
         this.objectMapper = objectMapper;
     }
@@ -53,6 +57,15 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
+    }
+
+    /** The auth throttle belongs only in Spring Security, not the container's outer servlet chain. */
+    @Bean
+    public FilterRegistrationBean<AuthRateLimitFilter> authRateLimitServletRegistration(
+            AuthRateLimitFilter filter) {
+        FilterRegistrationBean<AuthRateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
@@ -68,6 +81,8 @@ public class SecurityConfig {
                         // Phone scanner uses a random, short-lived, per-session capability token.
                         // It cannot access any other API resource through this public route.
                         .requestMatchers("/api/phone-scanner/**").permitAll()
+                        // A registered device can only update its last-seen timestamp with its device token.
+                        .requestMatchers(HttpMethod.POST, "/api/device-inputs/*/heartbeat").permitAll()
                         // Login and account creation are public authentication operations.
                         .requestMatchers("/api/auth/login", "/api/auth/register",
                                 "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
@@ -79,7 +94,10 @@ public class SecurityConfig {
                         // WebSocket handshake (STOMP CONNECT carries its own identity).
                         .requestMatchers("/ws-chat/**").permitAll()
                         .requestMatchers("/api/account/**").hasRole("MEMBER")
+                        .requestMatchers("/api/input-policies/**").hasAnyRole("ADMIN", "LIBRARIAN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Global storage statistics are operational data, not a member message resource.
+                        .requestMatchers("/api/v1/files/stats").hasAnyRole("ADMIN", "LIBRARIAN")
                         .requestMatchers("/api/book/**", "/api/person/**", "/api/loan/**",
                                 "/api/reservations/**", "/api/dashboard/**", "/api/excel-import/**")
                                 .hasAnyRole("ADMIN", "LIBRARIAN")
@@ -91,6 +109,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint(this::writeUnauthorized)
                         .accessDeniedHandler((request, response, denied) ->
                                 writeJson(response, HttpServletResponse.SC_FORBIDDEN, "Forbidden")))
+                .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
